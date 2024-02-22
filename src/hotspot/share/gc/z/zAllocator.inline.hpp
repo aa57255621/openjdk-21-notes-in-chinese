@@ -46,14 +46,20 @@ inline zaddress ZAllocatorEden::alloc_tlab(size_t size) {
   return _object_allocator.alloc_object(size);
 }
 
+// 定义一个内联函数，用于在Eden空间分配对象
 inline zaddress ZAllocatorEden::alloc_object(size_t size) {
+  // 调用_object_allocator的alloc_object方法分配指定大小的对象
   const zaddress addr = _object_allocator.alloc_object(size);
 
+  // 检查分配的地址是否为空
   if (is_null(addr)) {
+    // 如果为空，则调用ZHeap的heap方法获取堆实例，然后调用out_of_memory方法处理内存不足的情况
     ZHeap::heap()->out_of_memory();
   }
 
+  // 返回分配的对象地址
   return addr;
 }
+
 
 #endif // SHARE_GC_Z_ZALLOCATOR_INLINE_HPP

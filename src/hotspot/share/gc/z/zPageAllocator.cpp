@@ -446,359 +446,351 @@ void ZPageAllocator::unmap_page(const ZPage* page) const {
   _physical.unmap(page->start(), page->size());
 }
 
+// ZPageAllocator类中安全销毁页面的成员函数
 void ZPageAllocator::safe_destroy_page(ZPage* page) {
-  // Destroy page safely
+  // 安全地销毁页面
   _safe_destroy.schedule_delete(page);
 }
 
+// ZPageAllocator类中销毁页面的成员函数
 void ZPageAllocator::destroy_page(ZPage* page) {
-  // Free virtual memory
+  // 释放虚拟内存
   _virtual.free(page->virtual_memory());
 
-  // Free physical memory
+  // 释放物理内存
   _physical.free(page->physical_memory());
 
-  // Destroy page safely
+  // 安全地销毁页面
   safe_destroy_page(page);
 }
 
+// ZPageAllocator类中判断是否允许分配的成员函数
 bool ZPageAllocator::is_alloc_allowed(size_t size) const {
-  const size_t available = _current_max_capacity - _used - _claimed;
-  return available >= size;
+  const size_t available = _current_max_capacity - _used - _claimed; // 计算可用空间
+  return available >= size; // 如果可用空间大于或等于请求的大小，则允许分配
 }
 
+// ZPageAllocator类中执行页面分配核心部分的成员函数
 bool ZPageAllocator::alloc_page_common_inner(ZPageType type, size_t size, ZList<ZPage>* pages) {
   if (!is_alloc_allowed(size)) {
-    // Out of memory
+    // 内存不足
     return false;
   }
 
-  // Try allocate from the page cache
+  // 尝试从页面缓存中分配
   ZPage* const page = _cache.alloc_page(type, size);
   if (page != nullptr) {
-    // Success
+    // 成功
     pages->insert_last(page);
     return true;
   }
 
-  // Try increase capacity
+  // 尝试增加容量
   const size_t increased = increase_capacity(size);
   if (increased < size) {
-    // Could not increase capacity enough to satisfy the allocation
-    // completely. Flush the page cache to satisfy the remainder.
+    // 无法增加足够的容量来完全满足分配
+    // 完全。刷新页面缓存以满足剩余部分。
     const size_t remaining = size - increased;
     _cache.flush_for_allocation(remaining, pages);
   }
 
-  // Success
+  // 成功
   return true;
 }
 
+// ZPageAllocator类中执行页面分配公共部分的成员函数
 bool ZPageAllocator::alloc_page_common(ZPageAllocation* allocation) {
-  const ZPageType type = allocation->type();
-  const size_t size = allocation->size();
-  const ZAllocationFlags flags = allocation->flags();
-  ZList<ZPage>* const pages = allocation->pages();
+  const ZPageType type = allocation->type(); // 获取页面类型
+  const size_t size = allocation->size(); // 获取请求的大小
+  const ZAllocationFlags flags = allocation->flags(); // 获取分配标志
+  ZList<ZPage>* const pages = allocation->pages(); // 获取页面列表
 
   if (!alloc_page_common_inner(type, size, pages)) {
-    // Out of memory
+    // 内存不足
     return false;
   }
 
-  // Updated used statistics
+  // 更新已使用统计信息
   increase_used(size);
 
-  // Success
+  // 成功
   return true;
 }
 
+// 检查初始化期间是否出现内存不足的静态函数
 static void check_out_of_memory_during_initialization() {
   if (!is_init_completed()) {
     vm_exit_during_initialization("java.lang.OutOfMemoryError", "Java heap too small");
   }
 }
 
+// ZPageAllocator类中处理停止分配的成员函数
 bool ZPageAllocator::alloc_page_stall(ZPageAllocation* allocation) {
-  ZStatTimer timer(ZCriticalPhaseAllocationStall);
-  EventZAllocationStall event;
+  ZStatTimer timer(ZCriticalPhaseAllocationStall); // 开始计时
+  EventZAllocationStall event; // 创建一个事件用于记录分配停止
 
-  // We can only block if the VM is fully initialized
+  // 我们只能在VM完全初始化后停止
   check_out_of_memory_during_initialization();
 
-  // Start asynchronous minor GC
+  // 启动异步的年轻代GC
   const ZDriverRequest request(GCCause::_z_allocation_stall, ZYoungGCThreads, 0);
   ZDriver::minor()->collect(request);
 
-  // Wait for allocation to complete or fail
+  // 等待分配完成或失败
   const bool result = allocation->wait();
 
   {
-    // Guard deletion of underlying semaphore. This is a workaround for
-    // a bug in sem_post() in glibc < 2.21, where it's not safe to destroy
-    // the semaphore immediately after returning from sem_wait(). The
-    // reason is that sem_post() can touch the semaphore after a waiting
-    // thread have returned from sem_wait(). To avoid this race we are
-    // forcing the waiting thread to acquire/release the lock held by the
-    // posting thread. https://sourceware.org/bugzilla/show_bug.cgi?id=12674
+    // 保护底层信号量的删除。这是一个解决glibc < 2.21中sem_post()的bug的变通方法，
+    // 其中在从sem_wait()返回后立即销毁信号量是不安全的。原因是sem_post()可以在等待线程
+    // 从sem_wait()返回后触摸信号量。为了避免这个竞争，我们强制等待线程获取/释放由发布线程持有的锁。
     ZLocker<ZLock> locker(&_lock);
   }
 
-  // Send event
+  // 发送事件
   event.commit((u8)allocation->type(), allocation->size());
 
   return result;
 }
 
+// ZPageAllocator类中尝试分配页面或停止的成员函数
 bool ZPageAllocator::alloc_page_or_stall(ZPageAllocation* allocation) {
   {
-    ZLocker<ZLock> locker(&_lock);
+    ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面分配
 
     if (alloc_page_common(allocation)) {
-      // Success
+      // 成功
       return true;
     }
 
-    // Failed
+    // 失败
     if (allocation->flags().non_blocking()) {
-      // Don't stall
+      // 不停止
       return false;
     }
 
-    // Enqueue allocation request
+    // 加入分配请求队列
     _stalled.insert_last(allocation);
   }
 
-  // Stall
+  // 停止
   return alloc_page_stall(allocation);
 }
 
+// ZPageAllocator类中创建新页面的成员函数
 ZPage* ZPageAllocator::alloc_page_create(ZPageAllocation* allocation) {
-  const size_t size = allocation->size();
+  const size_t size = allocation->size(); // 获取请求的大小
 
-  // Allocate virtual memory. To make error handling a lot more straight
-  // forward, we allocate virtual memory before destroying flushed pages.
-  // Flushed pages are also unmapped and destroyed asynchronously, so we
-  // can't immediately reuse that part of the address space anyway.
+  // 分配虚拟内存。为了使错误处理更加直接，我们在销毁刷新页面之前分配虚拟内存。
+  // 刷新页面也异步地未映射和销毁，所以无论如何我们也不能立即重用地址空间的一部分。
   const ZVirtualMemory vmem = _virtual.alloc(size, allocation->flags().low_address());
   if (vmem.is_null()) {
-    log_error(gc)("Out of address space");
-    return nullptr;
+    log_error(gc)("Out of address space"); // 打印地址空间不足的日志
+    return nullptr; // 返回nullptr表示分配失败
   }
 
-  ZPhysicalMemory pmem;
-  size_t flushed = 0;
+  ZPhysicalMemory pmem; // 初始化物理内存
+  size_t flushed = 0; // 初始化已刷新的大小
 
-  // Harvest physical memory from flushed pages
+  // 从刷新页面收集物理内存
   ZListRemoveIterator<ZPage> iter(allocation->pages());
   for (ZPage* page; iter.next(&page);) {
-    flushed += page->size();
+    flushed += page->size(); // 累加已刷新的大小
 
-    // Harvest flushed physical memory
+    // 收集已刷新的物理内存
     ZPhysicalMemory& fmem = page->physical_memory();
-    pmem.add_segments(fmem);
-    fmem.remove_segments();
+    pmem.add_segments(fmem); // 添加到物理内存
+    fmem.remove_segments(); // 移除已添加的段
 
-    // Unmap and destroy page
+    // 未映射和销毁页面
     _unmapper->unmap_and_destroy_page(page);
   }
 
   if (flushed > 0) {
-    allocation->set_flushed(flushed);
+    allocation->set_flushed(flushed); // 设置已刷新的大小
 
-    // Update statistics
+    // 更新统计信息
     ZStatInc(ZCounterPageCacheFlush, flushed);
     log_debug(gc, heap)("Page Cache Flushed: " SIZE_FORMAT "M", flushed / M);
   }
 
-  // Allocate any remaining physical memory. Capacity and used has
-  // already been adjusted, we just need to fetch the memory, which
-  // is guaranteed to succeed.
+  // 分配任何剩余的物理内存。容量和已使用量已经调整，我们只需要获取内存，这可以保证成功。
   if (flushed < size) {
     const size_t remaining = size - flushed;
-    allocation->set_committed(remaining);
-    _physical.alloc(pmem, remaining);
+    allocation->set_committed(remaining); // 设置已承诺的大小
+    _physical.alloc(pmem, remaining); // 分配物理内存
   }
 
-  // Create new page
-  return new ZPage(allocation->type(), vmem, pmem);
+  // 创建新页面
+  return new ZPage(allocation->type(), vmem, pmem); // 返回新创建的页面
 }
 
+// ZPageAllocator类中判断是否应该进行整理的成员函数
 bool ZPageAllocator::should_defragment(const ZPage* page) const {
-  // A small page can end up at a high address (second half of the address space)
-  // if we've split a larger page or we have a constrained address space. To help
-  // fight address space fragmentation we remap such pages to a lower address, if
-  // a lower address is available.
+  // 如果一个小的页面出现在较高的地址（地址空间的第二半部分），
+  // 如果我们已经分割了一个较大的页面，或者我们有一个受限制的地址空间。
+  // 为了帮助解决地址空间碎片化问题，如果有一个较低的地址可用，
+  // 我们会重映射这样的页面到较低的地址。
   return page->type() == ZPageType::small &&
          page->start() >= to_zoffset(_virtual.reserved() / 2) &&
          page->start() > _virtual.lowest_available_address();
 }
 
+// ZPageAllocator类中判断分配是否立即满足的成员函数
 bool ZPageAllocator::is_alloc_satisfied(ZPageAllocation* allocation) const {
-  // The allocation is immediately satisfied if the list of pages contains
-  // exactly one page, with the type and size that was requested. However,
-  // even if the allocation is immediately satisfied we might still want to
-  // return false here to force the page to be remapped to fight address
-  // space fragmentation.
+  // 如果页面列表包含恰好一个页面，并且该页面具有请求的类型和大小，
+  // 则分配立即满足。但是，即使分配立即满足，我们在这里可能仍然希望返回false，
+  // 以强制页面进行重映射，以帮助解决地址空间碎片化问题。
 
   if (allocation->pages()->size() != 1) {
-    // Not a single page
+    // 不是单个页面
     return false;
   }
 
   const ZPage* const page = allocation->pages()->first();
   if (page->type() != allocation->type() ||
       page->size() != allocation->size()) {
-    // Wrong type or size
+    // 类型或大小错误
     return false;
   }
 
   if (should_defragment(page)) {
-    // Defragment address space
+    // 整理地址空间
     ZStatInc(ZCounterDefragment);
     return false;
   }
 
-  // Allocation immediately satisfied
+  // 分配立即满足
   return true;
 }
 
+
+// ZPageAllocator类中用于最终化页面分配的成员函数
 ZPage* ZPageAllocator::alloc_page_finalize(ZPageAllocation* allocation) {
-  // Fast path
+  // 快速路径
   if (is_alloc_satisfied(allocation)) {
     return allocation->pages()->remove_first();
   }
-
-  // Slow path
+  // 慢速路径
   ZPage* const page = alloc_page_create(allocation);
   if (page == nullptr) {
-    // Out of address space
+    // 地址空间不足
     return nullptr;
   }
-
-  // Commit page
+  // 提交页面
   if (commit_page(page)) {
-    // Success
+    // 成功
     map_page(page);
     return page;
   }
-
-  // Failed or partially failed. Split of any successfully committed
-  // part of the page into a new page and insert it into list of pages,
-  // so that it will be re-inserted into the page cache.
+  // 失败或部分失败。将任何成功提交的页面部分分割成新的页面，并将其插入页面列表中，
+  // 以便它可以被重新插入到页面缓存中。
   ZPage* const committed_page = page->split_committed();
   destroy_page(page);
-
   if (committed_page != nullptr) {
     map_page(committed_page);
     allocation->pages()->insert_last(committed_page);
   }
-
   return nullptr;
 }
 
+// ZPageAllocator类中分配页面的成员函数
 ZPage* ZPageAllocator::alloc_page(ZPageType type, size_t size, ZAllocationFlags flags, ZPageAge age) {
-  EventZPageAllocation event;
+  EventZPageAllocation event; // 创建一个事件用于记录页面分配
 
-retry:
-  ZPageAllocation allocation(type, size, flags);
+retry: // 定义一个标签，用于在分配失败时重试
+  ZPageAllocation allocation(type, size, flags); // 创建一个页面分配对象
 
-  // Allocate one or more pages from the page cache. If the allocation
-  // succeeds but the returned pages don't cover the complete allocation,
-  // then finalize phase is allowed to allocate the remaining memory
-  // directly from the physical memory manager. Note that this call might
-  // block in a safepoint if the non-blocking flag is not set.
+  // 从页面缓存中分配一个或多个页面。如果分配成功但返回的页面没有覆盖完整的分配，
+  // 则允许最终化阶段直接从物理内存管理器分配剩余的内存。注意，如果未设置非阻塞标志，
+  // 此调用可能会在安全点阻塞。
   if (!alloc_page_or_stall(&allocation)) {
-    // Out of memory
+    // 内存不足
     return nullptr;
   }
 
-  ZPage* const page = alloc_page_finalize(&allocation);
+  ZPage* const page = alloc_page_finalize(&allocation); // 调用最终化方法分配页面
   if (page == nullptr) {
-    // Failed to commit or map. Clean up and retry, in the hope that
-    // we can still allocate by flushing the page cache (more aggressively).
+    // 提交或映射失败。清理并重试，希望我们仍然可以通过更积极地刷新页面缓存来分配内存。
     free_pages_alloc_failed(&allocation);
-    goto retry;
+    goto retry; // 跳转到retry标签，重新尝试分配
   }
 
-  // The generation's used is tracked here when the page is handed out
-  // to the allocating thread. The overall heap "used" is tracked in
-  // the lower-level allocation code.
+  // 当页面被分配给分配线程时，在这里跟踪代的已使用量。整体堆的“已使用”量在较低级别的分配代码中跟踪。
   const ZGenerationId id = age == ZPageAge::old ? ZGenerationId::old : ZGenerationId::young;
   increase_used_generation(id, size);
 
-  // Reset page. This updates the page's sequence number and must
-  // be done after we potentially blocked in a safepoint (stalled)
-  // where the global sequence number was updated.
+  // 重置页面。这更新了页面的序列号，并且必须在潜在的阻塞安全点（停止）之后执行，
+  // 此时全局序列号可能已更新。
   page->reset(age, ZPageResetType::Allocation);
 
-  // Update allocation statistics. Exclude gc relocations to avoid
-  // artificial inflation of the allocation rate during relocation.
+  // 更新分配统计信息。排除GC重定位以避免在重定位期间人为膨胀分配率。
   if (!flags.gc_relocation() && is_init_completed()) {
-    // Note that there are two allocation rate counters, which have
-    // different purposes and are sampled at different frequencies.
+    // 注意，有两个分配率计数器，它们有不同的目的，并且以不同的频率进行采样。
     ZStatInc(ZCounterMutatorAllocationRate, size);
     ZStatMutatorAllocRate::sample_allocation(size);
   }
 
-  // Send event
+  // 发送事件
   event.commit((u8)type, size, allocation.flushed(), allocation.committed(),
                page->physical_memory().nsegments(), flags.non_blocking());
 
-  return page;
+  return page; // 返回分配的页面
 }
 
+// ZPageAllocator类中处理停止分配的成员函数
 void ZPageAllocator::satisfy_stalled() {
-  for (;;) {
-    ZPageAllocation* const allocation = _stalled.first();
+  for (;;) { // 无限循环，直到停止队列空为止
+    ZPageAllocation* const allocation = _stalled.first(); // 获取停止队列的第一个分配请求
     if (allocation == nullptr) {
-      // Allocation queue is empty
+      // 分配请求队列为空
       return;
     }
 
     if (!alloc_page_common(allocation)) {
-      // Allocation could not be satisfied, give up
+      // 分配无法满足，放弃
       return;
     }
 
-    // Allocation succeeded, dequeue and satisfy allocation request.
-    // Note that we must dequeue the allocation request first, since
-    // it will immediately be deallocated once it has been satisfied.
+    // 分配成功，移除并满足分配请求。注意，我们必须首先移除分配请求，因为一旦满足，它就会立即被释放。
     _stalled.remove(allocation);
     allocation->satisfy(true);
   }
 }
 
+// ZPageAllocator类中回收页面的成员函数
 void ZPageAllocator::recycle_page(ZPage* page) {
-  // Set time when last used
+  // 设置最后使用时间
   page->set_last_used();
 
-  // Cache page
+  // 缓存页面
   _cache.free_page(page);
 }
 
+// ZPageAllocator类中释放页面的成员函数
 void ZPageAllocator::free_page(ZPage* page) {
-  const ZGenerationId generation_id = page->generation_id();
-  ZPage* const to_recycle = _safe_recycle.register_and_clone_if_activated(page);
+  const ZGenerationId generation_id = page->generation_id(); // 获取页面所属的代
+  ZPage* const to_recycle = _safe_recycle.register_and_clone_if_activated(page); // 注册并克隆页面（如果激活）
 
-  ZLocker<ZLock> locker(&_lock);
+  ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
 
-  // Update used statistics
+  // 更新已使用统计信息
   const size_t size = to_recycle->size();
-  decrease_used(size);
-  decrease_used_generation(generation_id, size);
+  decrease_used(size); // 减少整体已使用量
+  decrease_used_generation(generation_id, size); // 减少指定代的已使用量
 
-  // Free page
+  // 回收页面
   recycle_page(to_recycle);
 
-  // Try satisfy stalled allocations
+  // 尝试满足停止的分配
   satisfy_stalled();
 }
 
+// ZPageAllocator类中批量释放页面的成员函数
 void ZPageAllocator::free_pages(const ZArray<ZPage*>* pages) {
-  ZArray<ZPage*> to_recycle;
+  ZArray<ZPage*> to_recycle; // 初始化要回收的页面数组
 
-  size_t young_size = 0;
-  size_t old_size = 0;
+  size_t young_size = 0; // 初始化年轻代大小
+  size_t old_size = 0; // 初始化老年代大小
 
   ZArrayIterator<ZPage*> pages_iter(pages);
   for (ZPage* page; pages_iter.next(&page);) {
@@ -812,94 +804,94 @@ void ZPageAllocator::free_pages(const ZArray<ZPage*>* pages) {
 
   ZLocker<ZLock> locker(&_lock);
 
-  // Update used statistics
+  // 更新已使用统计信息
   decrease_used(young_size + old_size);
   decrease_used_generation(ZGenerationId::young, young_size);
   decrease_used_generation(ZGenerationId::old, old_size);
 
-  // Free pages
+  // 释放页面
   ZArrayIterator<ZPage*> iter(&to_recycle);
   for (ZPage* page; iter.next(&page);) {
     recycle_page(page);
   }
 
-  // Try satisfy stalled allocations
+  // 尝试满足停止的分配
   satisfy_stalled();
 }
 
+// ZPageAllocator类中处理分配失败的成员函数
 void ZPageAllocator::free_pages_alloc_failed(ZPageAllocation* allocation) {
-  ZArray<ZPage*> to_recycle;
+  ZArray<ZPage*> to_recycle; // 初始化要回收的页面数组
 
   ZListRemoveIterator<ZPage> allocation_pages_iter(allocation->pages());
   for (ZPage* page; allocation_pages_iter.next(&page);) {
     to_recycle.push(_safe_recycle.register_and_clone_if_activated(page));
   }
 
-  ZLocker<ZLock> locker(&_lock);
+  ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
 
-  // Only decrease the overall used and not the generation used,
-  // since the allocation failed and generation used wasn't bumped.
+  // 只减少整体已使用量，而不减少代已使用量，
+  // 因为分配失败，代已使用量没有被增加。
   decrease_used(allocation->size());
 
-  size_t freed = 0;
+  size_t freed = 0; // 初始化已释放的字节数为0
 
-  // Free any allocated/flushed pages
+  // 释放任何已分配/已刷新的页面
   ZArrayIterator<ZPage*> iter(&to_recycle);
   for (ZPage* page; iter.next(&page);) {
-    freed += page->size();
-    recycle_page(page);
+    freed += page->size(); // 累加已释放的字节数
+    recycle_page(page); // 回收页面
   }
 
-  // Adjust capacity and used to reflect the failed capacity increase
+  // 调整容量和已使用量以反映失败的容量增加
   const size_t remaining = allocation->size() - freed;
   decrease_capacity(remaining, true /* set_max_capacity */);
 
-  // Try satisfy stalled allocations
+  // 尝试满足停止的分配
   satisfy_stalled();
 }
 
+// ZPageAllocator类中撤销承诺的成员函数
 size_t ZPageAllocator::uncommit(uint64_t* timeout) {
-  // We need to join the suspendible thread set while manipulating capacity and
-  // used, to make sure GC safepoints will have a consistent view.
-  ZList<ZPage> pages;
-  size_t flushed;
+  // 在操作容量和已使用量时，我们需要加入可暂停线程集合，以确保GC安全点具有一致的视图。
+  ZList<ZPage> pages; // 初始化页面列表
+  size_t flushed; // 初始化已刷新的大小
 
   {
-    SuspendibleThreadSetJoiner sts_joiner;
-    ZLocker<ZLock> locker(&_lock);
+    SuspendibleThreadSetJoiner sts_joiner; // 加入可暂停线程集合
+    ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
 
-    // Never uncommit below min capacity. We flush out and uncommit chunks at
-    // a time (~0.8% of the max capacity, but at least one granule and at most
-    // 256M), in case demand for memory increases while we are uncommitting.
+    // 永远不会撤销承诺低于最小容量。我们一次刷新和撤销承诺一块内存（~0.8%的最大容量，但至少一个粒度且不超过256M），
+    // 以免在撤销承诺期间内存需求增加。
     const size_t retain = MAX2(_used, _min_capacity);
     const size_t release = _capacity - retain;
     const size_t limit = MIN2(align_up(_current_max_capacity >> 7, ZGranuleSize), 256 * M);
     const size_t flush = MIN2(release, limit);
 
-    // Flush pages to uncommit
+    // 刷新页面以撤销承诺
     flushed = _cache.flush_for_uncommit(flush, &pages, timeout);
     if (flushed == 0) {
-      // Nothing flushed
+      // 没有刷新任何内容
       return 0;
     }
 
-    // Record flushed pages as claimed
+    // 将刷新页面记录为已承诺
     Atomic::add(&_claimed, flushed);
   }
 
-  // Unmap, uncommit, and destroy flushed pages
+  // 取消映射、撤销承诺并销毁已刷新的页面
   ZListRemoveIterator<ZPage> iter(&pages);
   for (ZPage* page; iter.next(&page);) {
-    unmap_page(page);
-    uncommit_page(page);
-    destroy_page(page);
+    unmap_page(page); // 取消映射页面
+    uncommit_page(page); // 撤销承诺页面
+    destroy_page(page); // 销毁页面
   }
 
   {
-    SuspendibleThreadSetJoiner sts_joiner;
-    ZLocker<ZLock> locker(&_lock);
+    SuspendibleThreadSetJoiner sts_joiner; // 加入可暂停线程集合
+    ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
 
-    // Adjust claimed and capacity to reflect the uncommit
+    // 调整已承诺和容量以反映撤销承诺
     Atomic::sub(&_claimed, flushed);
     decrease_capacity(flushed, false /* set_max_capacity */);
   }
@@ -907,14 +899,17 @@ size_t ZPageAllocator::uncommit(uint64_t* timeout) {
   return flushed;
 }
 
+// ZPageAllocator类中启用安全销毁的常成员函数
 void ZPageAllocator::enable_safe_destroy() const {
   _safe_destroy.enable_deferred_delete();
 }
 
+// ZPageAllocator类中禁用安全销毁的常成员函数
 void ZPageAllocator::disable_safe_destroy() const {
   _safe_destroy.disable_deferred_delete();
 }
 
+// ZPageAllocator类中启用和禁用安全回收的常成员函数
 void ZPageAllocator::enable_safe_recycle() const {
   _safe_recycle.activate();
 }
@@ -923,77 +918,86 @@ void ZPageAllocator::disable_safe_recycle() const {
   _safe_recycle.deactivate();
 }
 
+// 静态函数，用于检查分配是否见过年轻代
 static bool has_alloc_seen_young(const ZPageAllocation* allocation) {
   return allocation->young_seqnum() != ZGeneration::young()->seqnum();
 }
 
+// 静态函数，用于检查分配是否见过老年代
 static bool has_alloc_seen_old(const ZPageAllocation* allocation) {
   return allocation->old_seqnum() != ZGeneration::old()->seqnum();
 }
 
+// ZPageAllocator类中判断是否正在停止分配的常成员函数
 bool ZPageAllocator::is_alloc_stalling() const {
   ZLocker<ZLock> locker(&_lock);
   return _stalled.first() != nullptr;
 }
 
+// ZPageAllocator类中判断是否正在为老年代停止分配的常成员函数
 bool ZPageAllocator::is_alloc_stalling_for_old() const {
   ZLocker<ZLock> locker(&_lock);
 
   ZPageAllocation* const allocation = _stalled.first();
   if (allocation == nullptr) {
-    // No stalled allocations
+    // 没有停止的分配
     return false;
   }
 
   return has_alloc_seen_young(allocation) && !has_alloc_seen_old(allocation);
 }
 
+// ZPageAllocator类中处理内存不足通知和重试GC的成员函数
 void ZPageAllocator::notify_out_of_memory() {
-  // Fail allocation requests that were enqueued before the last major GC started
+  // 失败在最后一次主要GC开始之前排队分配请求
   for (ZPageAllocation* allocation = _stalled.first(); allocation != nullptr; allocation = _stalled.first()) {
     if (!has_alloc_seen_old(allocation)) {
-      // Not out of memory, keep remaining allocation requests enqueued
+      // 没有内存不足，保留剩余的分配请求排队
       return;
     }
 
-    // Out of memory, dequeue and fail allocation request
+    // 内存不足，移除并失败分配请求
     _stalled.remove(allocation);
     allocation->satisfy(false);
   }
 }
 
+// ZPageAllocator类中重启GC的常成员函数
 void ZPageAllocator::restart_gc() const {
   ZPageAllocation* const allocation = _stalled.first();
   if (allocation == nullptr) {
-    // No stalled allocations
+    // 没有停止的分配
     return;
   }
 
   if (!has_alloc_seen_young(allocation)) {
-    // Start asynchronous minor GC, keep allocation requests enqueued
+    // 启动异步的年轻代GC，保留分配请求排队
     const ZDriverRequest request(GCCause::_z_allocation_stall, ZYoungGCThreads, 0);
     ZDriver::minor()->collect(request);
   } else {
-    // Start asynchronous major GC, keep allocation requests enqueued
+    // 启动异步的主要GC，保留分配请求排队
     const ZDriverRequest request(GCCause::_z_allocation_stall, ZYoungGCThreads, ZOldGCThreads);
     ZDriver::major()->collect(request);
   }
 }
 
+// ZPageAllocator类中处理年轻代停止分配的成员函数
 void ZPageAllocator::handle_alloc_stalling_for_young() {
-  ZLocker<ZLock> locker(&_lock);
-  restart_gc();
+  ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
+  restart_gc(); // 重启GC
 }
 
+// ZPageAllocator类中处理老年代停止分配的成员函数
 void ZPageAllocator::handle_alloc_stalling_for_old(bool cleared_soft_refs) {
-  ZLocker<ZLock> locker(&_lock);
+  ZLocker<ZLock> locker(&_lock); // 使用互斥锁保护页面释放
   if (cleared_soft_refs) {
-    notify_out_of_memory();
+    notify_out_of_memory(); // 通知内存不足
   }
-  restart_gc();
+  restart_gc(); // 重启GC
 }
 
+// ZPageAllocator类中处理所有线程的成员函数
 void ZPageAllocator::threads_do(ThreadClosure* tc) const {
-  tc->do_thread(_unmapper);
-  tc->do_thread(_uncommitter);
+  tc->do_thread(_unmapper); // 处理unmapper线程
+  tc->do_thread(_uncommitter); // 处理uncommitter线程
 }

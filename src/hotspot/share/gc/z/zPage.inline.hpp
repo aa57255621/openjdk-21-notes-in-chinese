@@ -417,6 +417,7 @@ inline zaddress_unsafe ZPage::find_base(volatile zpointer* p) {
   return find_base_unsafe(p);
 }
 
+// ZPage类中用于处理已记住的OOPs（对象）的模板函数
 template <typename Function>
 inline void ZPage::oops_do_remembered(Function function) {
   _remembered_set.iterate_previous([&](uintptr_t local_offset) {
@@ -451,21 +452,22 @@ inline void ZPage::oops_do_current_remembered(Function function) {
   });
 }
 
+// ZPage类中用于分配对象的成员函数
 inline zaddress ZPage::alloc_object(size_t size) {
-  assert(is_allocating(), "Invalid state");
+  assert(is_allocating(), "Invalid state"); // 断言当前页处于分配状态
 
-  const size_t aligned_size = align_up(size, object_alignment());
-  const zoffset_end addr = top();
+  const size_t aligned_size = align_up(size, object_alignment()); // 对象大小对齐
+  const zoffset_end addr = top(); // 获取当前页的顶部地址
 
   zoffset_end new_top;
 
   if (!to_zoffset_end(&new_top, addr, aligned_size)) {
-    // Next top would be outside of the heap - bail
+    // 如果下一个顶部地址超出了堆的范围，则返回null
     return zaddress::null;
   }
 
   if (new_top > end()) {
-    // Not enough space left in the page
+    // 如果没有足够的空间，则返回null
     return zaddress::null;
   }
 
@@ -474,88 +476,93 @@ inline zaddress ZPage::alloc_object(size_t size) {
   return ZOffset::address(to_zoffset(addr));
 }
 
+// ZPage类中用于原子方式分配对象的内联函数
 inline zaddress ZPage::alloc_object_atomic(size_t size) {
-  assert(is_allocating(), "Invalid state");
+  assert(is_allocating(), "Invalid state"); // 断言当前页处于分配状态
 
-  const size_t aligned_size = align_up(size, object_alignment());
-  zoffset_end addr = top();
+  const size_t aligned_size = align_up(size, object_alignment()); // 对象大小对齐
+  zoffset_end addr = top(); // 获取当前页的顶部地址
 
-  for (;;) {
-    zoffset_end new_top;
+  for (;;) { // 无限循环，直到分配成功或失败
+    zoffset_end new_top; // 用于存储新的顶部地址
 
     if (!to_zoffset_end(&new_top, addr, aligned_size)) {
-      // Next top would be outside of the heap - bail
+      // 如果下一个顶部地址超出了堆的范围，则返回null
       return zaddress::null;
     }
 
     if (new_top > end()) {
-      // Not enough space left
+      // 如果没有足够的空间，则返回null
       return zaddress::null;
     }
 
     const zoffset_end prev_top = Atomic::cmpxchg(&_top, addr, new_top);
+    // 使用原子比较交换操作来尝试更新顶部地址
     if (prev_top == addr) {
-      // Success
+      // 如果更新成功，则返回分配的对象地址
       return ZOffset::address(to_zoffset(addr));
     }
 
-    // Retry
+    // 如果更新失败（由于竞争），则重试
     addr = prev_top;
   }
 }
 
+// ZPage类中用于撤销对象分配的成员函数
 inline bool ZPage::undo_alloc_object(zaddress addr, size_t size) {
-  assert(is_allocating(), "Invalid state");
+  assert(is_allocating(), "Invalid state"); // 断言当前页处于分配状态
 
-  const zoffset offset = ZAddress::offset(addr);
-  const size_t aligned_size = align_up(size, object_alignment());
-  const zoffset_end old_top = top();
-  const zoffset_end new_top = old_top - aligned_size;
+  const zoffset offset = ZAddress::offset(addr); // 获取地址的偏移量
+  const size_t aligned_size = align_up(size, object_alignment()); // 对象大小对齐
+  const zoffset_end old_top = top(); // 获取当前页的顶部地址
+  const zoffset_end new_top = old_top - aligned_size; // 计算新的顶部地址
 
   if (new_top != offset) {
-    // Failed to undo allocation, not the last allocated object
+    // 如果新的顶部地址不是预期的地址，则无法撤销分配
     return false;
   }
 
-  _top = new_top;
+  _top = new_top; // 更新顶部地址
 
-  // Success
+  // 成功撤销分配
   return true;
 }
 
+// ZPage类中用于原子方式撤销对象分配的成员函数
 inline bool ZPage::undo_alloc_object_atomic(zaddress addr, size_t size) {
-  assert(is_allocating(), "Invalid state");
+  assert(is_allocating(), "Invalid state"); // 断言当前页处于分配状态
 
-  const zoffset offset = ZAddress::offset(addr);
-  const size_t aligned_size = align_up(size, object_alignment());
-  zoffset_end old_top = top();
+  const zoffset offset = ZAddress::offset(addr); // 获取地址的偏移量
+  const size_t aligned_size = align_up(size, object_alignment()); // 对象大小对齐
+  zoffset_end old_top = top(); // 获取当前页的顶部地址
 
   for (;;) {
-    const zoffset_end new_top = old_top - aligned_size;
+    const zoffset_end new_top = old_top - aligned_size; // 计算新的顶部地址
     if (new_top != offset) {
-      // Failed to undo allocation, not the last allocated object
+      // 如果新的顶部地址不是预期的地址，则无法撤销分配
       return false;
     }
 
-    const zoffset_end prev_top = Atomic::cmpxchg(&_top, old_top, new_top);
+    const zoffset_end prev_top = Atomic::cmpxchg(&_top, old_top, new_top); // 使用原子比较交换操作更新顶部地址
     if (prev_top == old_top) {
-      // Success
+      // 如果更新成功，则成功撤销分配
       return true;
     }
 
-    // Retry
+    // 如果更新失败，则重试
     old_top = prev_top;
   }
 }
 
+// ZPage类中用于记录日志信息的成员函数
 inline void ZPage::log_msg(const char* msg_format, ...) const {
-  LogTarget(Trace, gc, page) target;
-  if (target.is_enabled()) {
-    va_list argp;
-    va_start(argp, msg_format);
-    LogStream stream(target);
-    print_on_msg(&stream, err_msg(FormatBufferDummy(), msg_format, argp));
-    va_end(argp);
+  LogTarget(Trace, gc, page) target; // 创建日志目标
+  if (target.is_enabled()) { // 如果日志目标启用
+    va_list argp; // 创建可变参数列表
+    va_start(argp, msg_format); // 初始化可变参数列表
+    LogStream stream(target); // 创建日志流
+    print_on_msg(&stream, err_msg(FormatBufferDummy(), msg_format, argp)); // 打印日志信息
+    va_end(argp); // 清理可变参数列表
   }
 }
 

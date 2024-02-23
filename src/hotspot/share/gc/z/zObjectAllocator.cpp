@@ -102,28 +102,28 @@ zaddress ZObjectAllocator::alloc_object_in_shared_page(ZPage** shared_page,
     // 如果分配失败（地址为null），则分配新的页
     ZPage* const new_page = alloc_page(page_type, page_size, flags);
     if (new_page != nullptr) {
-      // 在安装新页之前在新页上分配对象
+      // 在替换新页之前在新页上分配对象
       addr = new_page->alloc_object(size);
 
     retry:
-      // 尝试安装新页
+      // 尝试替换新页
       ZPage* const prev_page = Atomic::cmpxchg(shared_page, page, new_page);
       if (prev_page != page) {
         if (prev_page == nullptr) {
-          // 如果之前的页已经被淘汰，重试安装新页
+          // 如果之前的页已经被淘汰，重试替换新页
           page = prev_page;
           goto retry;
         }
 
-        // 如果另一个页已经安装，首先尝试在那里分配
+        // 如果另一个页已经替换，首先尝试在那里分配
         const zaddress prev_addr = prev_page->alloc_object_atomic(size);
         if (is_null(prev_addr)) {
-          // 如果分配失败，重试安装新页
+          // 如果分配失败，重试替换新页
           page = prev_page;
           goto retry;
         }
 
-        // 如果在已安装的页上分配成功，更新地址
+        // 如果在已替换的页上分配成功，更新地址
         addr = prev_addr;
 
         // 撤销新页的分配

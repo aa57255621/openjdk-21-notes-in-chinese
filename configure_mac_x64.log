@@ -1,0 +1,363 @@
+configure: Configuration created at Fri Feb 23 09:13:33 CST 2024.
+checking for basename... /usr/bin/basename
+checking for dirname... /usr/bin/dirname
+checking for file... /usr/bin/file
+checking for ldd... no
+checking for echo... echo [builtin]
+checking for tr... /usr/bin/tr
+checking for uname... /usr/bin/uname
+checking for wc... /usr/bin/wc
+checking for grep that handles long lines and -e... /usr/bin/grep
+checking for egrep... /usr/bin/grep -E
+checking for a sed that does not truncate output... /usr/bin/sed
+checking for cygpath... [not found]
+checking for wslpath... [not found]
+checking for cmd.exe... [not found]
+checking build system type... aarch64-apple-darwin23.1.0
+checking host system type... aarch64-apple-darwin23.1.0
+checking target system type... aarch64-apple-darwin23.1.0
+checking openjdk-build os-cpu... macosx-aarch64
+checking openjdk-target os-cpu... macosx-aarch64
+configure: --with-target-bits are set to build platform address size; argument has no meaning
+checking compilation type... native
+checking for top-level directory... /Users/mac/Documents/jdkcompile/openjdk-21
+checking for bash... /bin/bash
+checking for cat... /bin/cat
+checking for chmod... /bin/chmod
+checking for cp... /bin/cp
+checking for cut... /usr/bin/cut
+checking for date... /bin/date
+checking for gdiff... [not found]
+checking for diff... /usr/bin/diff
+checking for expr... /bin/expr
+checking for find... /usr/bin/find
+checking for gunzip... /usr/bin/gunzip
+checking for pigz... [not found]
+checking for gzip... /usr/bin/gzip
+checking for head... /usr/bin/head
+checking for ln... /bin/ln
+checking for ls... /bin/ls
+checking for gmkdir... [not found]
+checking for mkdir... /bin/mkdir
+checking for mktemp... /usr/bin/mktemp
+checking for mv... /bin/mv
+checking for gawk... [not found]
+checking for nawk... [not found]
+checking for awk... /usr/bin/awk
+checking for printf... printf [builtin]
+checking for rm... /bin/rm
+checking for rmdir... /bin/rmdir
+checking for sh... /bin/sh
+checking for sort... /usr/bin/sort
+checking for tail... /usr/bin/tail
+checking for gtar... [not found]
+checking for tar... /usr/bin/tar
+checking for tee... /usr/bin/tee
+checking for touch... /usr/bin/touch
+checking for xargs... /usr/bin/xargs
+checking for fgrep... /usr/bin/grep -F
+checking for df... /bin/df
+checking for git... /opt/homebrew/bin/git
+checking for nice... /usr/bin/nice
+checking for greadlink... [not found]
+checking for readlink... /usr/bin/readlink
+checking for whoami... /usr/bin/whoami
+checking for lsb_release... [not found]
+checking for cmp... /usr/bin/cmp
+checking for uniq... /usr/bin/uniq
+checking for build environment type... dev, default (calculated from 'auto')
+checking if custom source is suppressed (openjdk-only)... disabled, default
+checking for --enable-debug... enabled, from command line
+checking which debug level to use... fastdebug
+checking which variants of the JVM to build... server
+checking if absolute paths should be allowed in the build output... yes, debug build
+checking for toolchain path... 
+checking for sdk name... macosx
+checking for xcodebuild... /usr/bin/xcodebuild
+configure: Setting sysroot from xcodebuild with SDK macosx
+checking for sysroot... /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.2.sdk
+checking for extra path... 
+checking where to store configuration... in default location
+checking what configuration name to use... macosx-aarch64-server-fastdebug
+checking for zypper... [not found]
+checking for apt-get... [not found]
+checking for yum... [not found]
+checking for brew... /opt/homebrew/bin/brew
+checking for pandoc... [not found]
+checking for gmake... [not found]
+checking for make... /usr/bin/make
+configure: Testing potential make at /usr/bin/make, found using make in PATH
+configure: Using GNU make at /usr/bin/make (version: GNU Make 3.81)
+checking if make --output-sync is supported... no
+checking for make --output-sync value... <invalid>, not available
+checking if find supports -delete... yes
+checking what type of tar was found... bsd
+checking that grep (/usr/bin/grep) -Fx handles empty lines in the pattern list correctly... yes
+checking for unzip... /usr/bin/unzip
+checking for zip... /usr/bin/zip
+checking for greadelf... [not found]
+checking for readelf... [not found]
+checking for dot... [not found]
+checking for stat... /usr/bin/stat
+checking for time... time [builtin]
+checking for flock... [not found]
+checking for dtrace... /usr/sbin/dtrace
+checking for gpatch... [not found]
+checking for patch... /usr/bin/patch
+checking if date is a GNU compatible version... no
+checking for dsymutil... /usr/bin/dsymutil
+checking for mig... /usr/bin/mig
+checking for xattr... /usr/bin/xattr
+checking for codesign... /usr/bin/codesign
+checking for SetFile... /usr/bin/SetFile
+checking for ulimit... ulimit [builtin]
+checking bash version... 3.2.57
+checking if bash supports pipefail... yes
+checking if bash supports errexit (-e)... yes
+checking for pkg-config... no
+checking for default LOG value... 
+checking for JMOD compression type... zip-1, default
+checking if packaged modules are kept... enabled, default
+checking for --with-build-user... mac, default
+checking for --with-jdk-rc-name... OpenJDK Platform, default
+checking for --with-vendor-name... N/A, default
+checking for --with-vendor-url... https://openjdk.org/, default
+checking for --with-vendor-bug-url... https://bugreport.java.com/bugreport/, default
+checking for --with-vendor-vm-bug-url... https://bugreport.java.com/bugreport/crash.jsp, default
+checking for --with-version-string... <none>, default
+checking for --with-version-feature... 21, default
+checking for --with-version-date... 2023-09-19, default
+checking for --with-vendor-version-string... <disabled>, default
+checking for --with-macosx-bundle-name-base... OpenJDK, default
+checking for --with-macosx-bundle-id-base... net.java.openjdk-internal, default
+checking for --with-macosx-bundle-build-version... 0, default
+checking for version string... 21-internal-adhoc.mac.openjdk-21
+configure: Found potential Boot JDK using JAVA_HOME
+configure: Potential Boot JDK found at /Library/Java/JavaVirtualMachines/jdk-11.jdk/Contents/Home is incorrect JDK version (java version "11.0.20" 2023-07-18 LTS Java(TM) SE Runtime Environment 18.9 (build 11.0.20+9-LTS-256) Java HotSpot(TM) 64-Bit Server VM 18.9 (build 11.0.20+9-LTS-256, mixed mode)); ignoring
+configure: (Your Boot JDK version must be one of: 20 21)
+configure: Found potential Boot JDK using /usr/libexec/java_home 
+checking for Boot JDK... /Library/Java/JavaVirtualMachines/graalvm-jdk-21.0.1/Contents/Home
+checking Boot JDK version... java version "21.0.1" 2023-10-17 Java(TM) SE Runtime Environment Oracle GraalVM 21.0.1+12.1 (build 21.0.1+12-jvmci-23.1-b19) Java HotSpot(TM) 64-Bit Server VM Oracle GraalVM 21.0.1+12.1 (build 21.0.1+12-jvmci-23.1-b19, mixed mode, sharing)
+checking for java [Boot JDK]... $BOOT_JDK/bin/java
+checking for javac [Boot JDK]... $BOOT_JDK/bin/javac
+checking for javadoc [Boot JDK]... $BOOT_JDK/bin/javadoc
+checking for jar [Boot JDK]... $BOOT_JDK/bin/jar
+checking if Boot JDK jar supports --date=TIMESTAMP... true
+checking if Boot JDK is 32 or 64 bits... 64
+checking for local Boot JDK Class Data Sharing (CDS)... yes, created
+checking for Build JDK... yes, will use output dir
+checking for docs-reference JDK... no, using interim javadoc for the docs-reference targets
+checking what source date to use... 1708650820, from 'current' (default)
+checking if we should build headless-only (no GUI)... disabled, default
+checking if linker should clean out unused code (linktime-gc)... disabled, default
+checking for graphviz dot... no, cannot generate full docs
+checking for pandoc... no, cannot generate full docs
+checking for --enable-full-docs... disabled, from default 'auto'
+checking for cacerts file... default
+checking for cacerts source... default
+checking for --enable-unlimited-crypto... enabled, default
+checking for jni library path... default
+checking if static build is available... yes
+checking if static build is enabled... disabled, default
+configure: Using default toolchain clang (clang/LLVM)
+configure: WARNING: Ignoring LDFLAGS(/opt/homebrew/opt/node@14/lib) found in environment. Use --with-extra-ldflags
+checking for clang... /usr/bin/clang
+checking resolved symbolic links for CC... no symlink
+configure: Using clang C compiler version 15.0.0 [Apple clang version 15.0.0 (clang-1500.1.0.2.5) Target: arm64-apple-darwin23.1.0 Thread model: posix InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin]
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether we are using the GNU C compiler... yes
+checking whether /usr/bin/clang accepts -g... yes
+checking for /usr/bin/clang option to accept ISO C89... none needed
+checking for clang++... /usr/bin/clang++
+checking resolved symbolic links for CXX... no symlink
+configure: Using clang C++ compiler version 15.0.0 [Apple clang version 15.0.0 (clang-1500.1.0.2.5) Target: arm64-apple-darwin23.1.0 Thread model: posix InstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin]
+checking whether we are using the GNU C++ compiler... yes
+checking whether /usr/bin/clang++ accepts -g... yes
+checking how to run the C preprocessor... /usr/bin/clang -E
+checking how to run the C++ preprocessor... /usr/bin/clang++ -E
+configure: Using clang linker version 1022.1 [@(#)PROGRAM:ld  PROJECT:dyld-1022.1]
+checking for ar... /usr/bin/ar
+checking for lipo... /usr/bin/lipo
+checking for otool... /usr/bin/otool
+checking for install_name_tool... /usr/bin/install_name_tool
+checking for metal... [not found]
+checking if metal can be run using xcrun... yes, will be using 'xcrun -sdk macosx metal'
+checking for metallib... [not found]
+checking if metallib can be run using xcrun... yes, will be using 'xcrun -sdk macosx metallib'
+checking for strip... /usr/bin/strip
+checking for nm... /usr/bin/nm
+checking for gobjdump... [not found]
+checking for objdump... /usr/bin/objdump
+checking for c++filt... /usr/bin/c++filt
+checking if CC supports "-m64"... yes
+checking if CXX supports "-m64"... yes
+checking if both CC and CXX support "-m64"... yes
+checking for jtreg... [not found]
+checking for jtreg test harness... no, not found
+checking for jmh (Java Microbenchmark Harness)... no, disabled
+checking for jib... no
+checking for ANSI C header files... yes
+checking for sys/types.h... yes
+checking for sys/stat.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for memory.h... yes
+checking for strings.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for unistd.h... yes
+checking stdio.h usability... yes
+checking stdio.h presence... yes
+checking for stdio.h... yes
+checking size of int *... 8
+checking for target address size... 64 bits
+checking whether byte ordering is bigendian... no
+checking if CC supports "-mbranch-protection=standard"... yes
+checking if CXX supports "-mbranch-protection=standard"... yes
+checking if both CC and CXX support "-mbranch-protection=standard"... yes
+checking for --enable-branch-protection... disabled, default
+checking if CC supports "-gdwarf-4 -gdwarf-aranges"... yes
+checking if CXX supports "-gdwarf-4 -gdwarf-aranges"... yes
+checking if both CC and CXX support "-gdwarf-4 -gdwarf-aranges"... yes
+checking for --enable-warnings-as-errors... disabled, from command line
+checking if TARGET is x86... no
+checking if CC supports "-fno-delete-null-pointer-checks"... yes
+checking if CXX supports "-fno-delete-null-pointer-checks"... yes
+checking if both CC and CXX support "-fno-delete-null-pointer-checks"... yes
+checking if CC supports "-ffp-contract=off"... yes
+checking if CXX supports "-ffp-contract=off"... yes
+checking if both CC and CXX support "-ffp-contract=off"... yes
+checking if BUILD is x86... no
+checking if BUILD_CC supports "-fno-delete-null-pointer-checks"... yes
+checking if BUILD_CXX supports "-fno-delete-null-pointer-checks"... yes
+checking if both BUILD_CC and BUILD_CXX support "-fno-delete-null-pointer-checks"... yes
+checking if BUILD_CC supports "-ffp-contract=off"... yes
+checking if BUILD_CXX supports "-ffp-contract=off"... yes
+checking if both BUILD_CC and BUILD_CXX support "-ffp-contract=off"... yes
+checking how to run strip... -S
+checking what type of native debug symbols to use... external
+checking if we should add external native debug symbols to the shipped bundles... no
+checking if native coverage is available... yes
+checking for --enable-native-coverage... disabled, default
+checking if AddressSanitizer (asan) is available... yes
+checking for --enable-asan... disabled, default
+checking if UndefinedBehaviorSanitizer (ubsan) is available... yes
+checking for --enable-ubsan... disabled, default
+checking if LeakSanitizer (lsan) is available... yes
+checking for --enable-lsan... disabled, default
+checking if fallback linker enabled... disabled, default
+checking for which libjpeg to use... bundled
+checking for which giflib to use... bundled
+checking for PNG... checking for which libpng to use... bundled
+checking for compress in -lz... yes
+checking for which zlib to use... bundled
+checking for which lcms to use... bundled
+checking for which harfbuzz to use... bundled
+checking cups/cups.h usability... yes
+checking cups/cups.h presence... yes
+checking for cups/cups.h... yes
+checking cups/ppd.h usability... yes
+checking cups/ppd.h presence... yes
+checking for cups/ppd.h... yes
+Using freetype: bundled
+checking for --enable-hsdis-bundling... disabled, default
+checking what hsdis backend to use... 'none', hsdis will not be built
+checking if hsdis should be bundled... no
+checking for --enable-libffi-bundling... disabled, default
+checking for cos in -lm... yes
+checking for dlopen in -ldl... yes
+checking for JVM features enabled by the user... none
+checking for JVM features disabled by the user... none
+checking if platform is supported by CDS... yes
+checking if JVM feature 'cds' is available... yes
+checking for dtrace tool and platform support... /usr/sbin/dtrace
+checking sys/sdt.h usability... yes
+checking sys/sdt.h presence... yes
+checking for sys/sdt.h... yes
+checking if JVM feature 'dtrace' is available... yes
+checking if platform is supported by JVMCI... yes
+checking if JVM feature 'jvmci' is available... yes
+checking if platform is supported by Shenandoah... yes
+checking if JVM feature 'shenandoahgc' is available... yes
+checking if static-build is enabled in configure... no, use --enable-static-build to enable static build.
+checking if JVM feature 'static-build' is available... no
+checking if platform is supported by ZGC... yes
+checking if JVM feature 'zgc' is available... yes
+checking JVM features to use for variant 'server'... 'cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check jvmci jvmti management parallelgc serialgc services shenandoahgc vm-structs zgc'
+checking what hotspot build time to use... 2024-02-23T01:13:40Z (from --with-source-date)
+checking if the jtreg failure handler is available... no (jtreg not present)
+checking if the jtreg failure handler should be built... disabled, default
+checking if the jtreg test thread factory is available... no (jtreg not present)
+checking if the jtreg test thread factory should be built... disabled, from default 'auto'
+checking if the CDS classlist generation should be enabled... enabled, from default 'auto'
+checking if any translations should be excluded... no
+checking if static man pages should be copied... enabled, default
+checking if CDS archive is available... yes
+checking if a default CDS archive should be generated... enabled, from default 'auto'
+checking if CDS archive is available... yes
+checking if compatible cds region alignment enabled... disabled, default
+checking for macosx code signing mode... auto, default
+checking for macosx code signing identity... openjdk_codesign, default
+checking if debug mode codesign is possible... yes
+checking for macosx code signing mode... debug
+checking for number of cores... 8
+checking for memory size... 16384 MB
+checking for appropriate number of jobs to run in parallel... 8
+checking whether to use javac server... enabled, default
+checking flags for boot jdk java command ...  -Duser.language=en -Duser.country=US  -XX:+UnlockDiagnosticVMOptions -XX:-VerifySharedSpaces -XX:SharedArchiveFile=/Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/configure-support/classes.jsa -Xshare:auto 
+checking flags for boot jdk java command for big workloads...  -Xms64M -Xmx1600M
+checking flags for bootcycle boot jdk java command for big workloads... -Xms64M -Xmx1600M
+checking flags for boot jdk java command for small workloads...  -XX:+UseSerialGC -Xms32M -Xmx512M -XX:TieredStopAtLevel=1
+checking for --enable-icecc... disabled, default
+checking if precompiled headers are available... yes
+checking for --enable-precompiled-headers... enabled, from default 'auto'
+checking for ccache... /opt/homebrew/bin/ccache
+checking if ccache is available... yes
+checking if ccache is enabled... enabled, from command line
+checking if C-compiler supports ccache precompiled headers... yes
+checking if build directory is on local disk... yes
+configure: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/configure-support/config.status
+config.status: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/spec.gmk
+config.status: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/bootcycle-spec.gmk
+config.status: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/buildjdk-spec.gmk
+config.status: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/compare.sh
+config.status: creating /Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug/Makefile
+
+====================================================
+The existing configuration has been successfully updated in
+/Users/mac/Documents/jdkcompile/openjdk-21/build/macosx-aarch64-server-fastdebug
+using configure arguments '--with-target-bits=64 --enable-debug --enable-ccache --with-jvm-variants=server --disable-warnings-as-errors'.
+
+Configuration summary:
+* Name:           macosx-aarch64-server-fastdebug
+* Debug level:    fastdebug
+* HS debug level: fastdebug
+* JVM variants:   server
+* JVM features:   server: 'cds compiler1 compiler2 dtrace epsilongc g1gc jfr jni-check jvmci jvmti management parallelgc serialgc services shenandoahgc vm-structs zgc' 
+* OpenJDK target: OS: macosx, CPU architecture: aarch64, address length: 64
+* Version string: 21-internal-adhoc.mac.openjdk-21 (21-internal)
+* Source date:    1708650820 (2024-02-23T01:13:40Z)
+
+Tools summary:
+* Boot JDK:       java version "21.0.1" 2023-10-17 Java(TM) SE Runtime Environment Oracle GraalVM 21.0.1+12.1 (build 21.0.1+12-jvmci-23.1-b19) Java HotSpot(TM) 64-Bit Server VM Oracle GraalVM 21.0.1+12.1 (build 21.0.1+12-jvmci-23.1-b19, mixed mode, sharing) (at /Library/Java/JavaVirtualMachines/graalvm-jdk-21.0.1/Contents/Home)
+* Toolchain:      clang (clang/LLVM from Xcode 15.2)
+* Sysroot:        /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX14.2.sdk
+* C Compiler:     Version 15.0.0 (at /usr/bin/clang)
+* C++ Compiler:   Version 15.0.0 (at /usr/bin/clang++)
+
+Build performance summary:
+* Build jobs:     8
+* Memory limit:   16384 MB
+* ccache status:  Active (4.9.1)
+
+WARNING: The result of this configuration has overridden an older
+configuration. You *should* run 'make clean' to make sure you get a
+proper build. Failure to do so might result in strange build problems.
+
+The following warnings were produced. Repeated here for convenience:
+WARNING: Ignoring LDFLAGS(/opt/homebrew/opt/node@14/lib) found in environment. Use --with-extra-ldflags
+

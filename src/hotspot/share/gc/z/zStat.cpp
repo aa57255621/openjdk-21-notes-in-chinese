@@ -889,40 +889,45 @@ ZStatTimerWorker::ZStatTimerWorker(const ZStatPhase& phase)
 // Stat sample/inc
 //
 void ZStatSample(const ZStatSampler& sampler, uint64_t value) {
+  // 获取采样器的数据
   ZStatSamplerData* const cpu_data = sampler.get();
+  // 使用原子操作增加样本计数
   Atomic::add(&cpu_data->_nsamples, 1u);
+  // 使用原子操作增加总和
   Atomic::add(&cpu_data->_sum, value);
-
+  // 无限循环，尝试更新最大值
   uint64_t max = cpu_data->_max;
   for (;;) {
     if (max >= value) {
-      // Not max
+      // 如果当前最大值大于等于新值，则不需要更新
       break;
     }
-
+    // 设置新值
     const uint64_t new_max = value;
+    // 尝试使用比较并交换操作更新最大值
     const uint64_t prev_max = Atomic::cmpxchg(&cpu_data->_max, max, new_max);
     if (prev_max == max) {
-      // Success
+      // 如果交换成功，则退出循环
       break;
     }
-
-    // Retry
+    // 如果交换失败，则重试
     max = prev_max;
   }
-
+  // 报告统计采样器的值
   ZTracer::report_stat_sampler(sampler, value);
 }
-
 void ZStatInc(const ZStatCounter& counter, uint64_t increment) {
+  // 获取计数器的数据
   ZStatCounterData* const cpu_data = counter.get();
+  // 使用原子操作增加计数器的值，并返回更新后的值
   const uint64_t value = Atomic::add(&cpu_data->_counter, increment);
-
+  // 报告统计计数器的增加量和当前值
   ZTracer::report_stat_counter(counter, increment, value);
 }
-
 void ZStatInc(const ZStatUnsampledCounter& counter, uint64_t increment) {
+  // 获取未采样计数器的数据
   ZStatCounterData* const cpu_data = counter.get();
+  // 使用原子操作增加计数器的值
   Atomic::add(&cpu_data->_counter, increment);
 }
 
@@ -950,59 +955,74 @@ void ZStatMutatorAllocRate::update_sampling_granule() {
 }
 
 void ZStatMutatorAllocRate::sample_allocation(size_t allocation_bytes) {
+  // 使用原子操作将分配的字节数添加到自上次采样以来的累计分配字节数
   const size_t allocated = Atomic::add(&_allocated_since_sample, allocation_bytes);
 
+  // 如果累计分配的字节数小于采样粒度，则无需采样
   if (allocated < Atomic::load(&_sampling_granule)) {
-    // No need for sampling yet
     return;
   }
 
+  // 尝试获取统计锁，如果获取失败，则表示已经有其他线程在处理，直接返回
   if (!_stat_lock->try_lock()) {
-    // Someone beat us to it
     return;
   }
 
+  // 再次加载自上次采样以来的累计分配字节数
   const size_t allocated_sample = Atomic::load(&_allocated_since_sample);
 
+  // 如果累计分配的字节数小于采样粒度，则释放锁并返回
   if (allocated_sample < _sampling_granule) {
-    // Someone beat us to it
     _stat_lock->unlock();
     return;
   }
 
+  // 获取当前的时钟计数
   const jlong now = os::elapsed_counter();
+  // 计算自上次采样以来的时间差
   const jlong elapsed = now - _last_sample_time;
 
+  // 如果时间差小于等于0，则可能是采样间隔过短，释放锁并返回
   if (elapsed <= 0) {
-    // Avoid sampling nonsense allocation rates
     _stat_lock->unlock();
     return;
   }
 
+  // 从累计分配字节数中减去本次采样的字节数
   Atomic::sub(&_allocated_since_sample, allocated_sample);
 
+  // 更新时间累计和字节数累计
   _samples_time.add(elapsed);
   _samples_bytes.add(allocated_sample);
 
+  // 获取最后一次采样的总字节数和总时间
   const double last_sample_bytes = _samples_bytes.sum();
   const double elapsed_time = _samples_time.sum();
 
+  // 计算过去的时间（秒）
   const double elapsed_seconds = elapsed_time / os::elapsed_frequency();
+  // 计算每秒的字节数
   const double bytes_per_second = double(last_sample_bytes) / elapsed_seconds;
+  // 将计算出的每秒字节数添加到_rate中
   _rate.add(bytes_per_second);
 
+  // 更新采样粒度
   update_sampling_granule();
 
+  // 更新最后一次采样的时间
   _last_sample_time = now;
 
+  // 打印调试信息
   log_debug(gc, alloc)("Mutator Allocation Rate: %.1fMB/s Predicted: %.1fMB/s, Avg: %.1f(+/-%.1f)MB/s",
                        bytes_per_second / M,
                        _rate.predict_next() / M,
                        _rate.avg() / M,
                        _rate.sd() / M);
 
+  // 释放锁
   _stat_lock->unlock();
 
+  // 评估规则
   ZDirector::evaluate_rules();
 }
 

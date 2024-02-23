@@ -64,21 +64,32 @@ inline void ZList<T>::verify_head() const {
 
 template <typename T>
 inline void ZList<T>::insert(ZListNode<T>* before, ZListNode<T>* node) {
+  // 验证链表头的有效性
   verify_head();
 
+  // 验证插入位置节点的前后链接是否有效
   before->verify_links();
+  // 验证新节点的前后链接是否未被链接
   node->verify_links_unlinked();
 
+  // 将新节点的前驱指针指向插入位置节点
   node->_prev = before;
+  // 将新节点的后继指针指向插入位置节点的后继节点
   node->_next = before->_next;
+  // 将插入位置节点的后继指针指向新节点
   before->_next = node;
+  // 将插入位置节点的后继节点的前驱指针指向新节点
   node->_next->_prev = node;
 
+  // 验证插入位置节点的前后链接是否有效（链接后）
   before->verify_links_linked();
+  // 验证新节点的前后链接是否有效（链接后）
   node->verify_links_linked();
 
+  // 增加链表的大小计数
   _size++;
 }
+
 
 template <typename T>
 inline ZListNode<T>* ZList<T>::cast_to_inner(T* elem) const {

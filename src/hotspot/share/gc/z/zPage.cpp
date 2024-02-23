@@ -139,27 +139,37 @@ void ZPage::reset_remembered_set() {
 }
 
 void ZPage::reset(ZPageAge age, ZPageResetType type) {
+  // 保存当前页面的年龄，用于后续的验证
   const ZPageAge prev_age = _age;
+  // 设置新的页面年龄
   _age = age;
+  // 重置页面最后使用的时间戳
   _last_used = 0;
 
+  // 根据新的年龄设置生成ID
   _generation_id = age == ZPageAge::old
       ? ZGenerationId::old
       : ZGenerationId::young;
 
+  // 重置序列号
   reset_seqnum();
 
-  // Flip aged pages are still filled with the same objects, need to retain the top pointer.
+  // 如果重置类型不是FlipAging，则重置_top指针
+  // FlipAging类型的页面仍然包含相同的对象，因此需要保留_top指针
   if (type != ZPageResetType::FlipAging) {
     _top = to_zoffset_end(start());
   }
 
+  // 重置记忆集
   reset_remembered_set();
+  // 验证重置后的记忆集
   verify_remset_after_reset(prev_age, type);
 
+  // 如果重置类型是InPlaceRelocation，或者页面从年轻代晋升到老年代
+  // 则重置_live_map
   if (type != ZPageResetType::InPlaceRelocation || (prev_age != ZPageAge::old && age == ZPageAge::old)) {
-    // Promoted in-place relocations reset the live map,
-    // because they clone the page.
+    // 晋升时的原地重定位会重置_live_map，
+    // 因为它们会克隆页面。
     _livemap.reset();
   }
 }

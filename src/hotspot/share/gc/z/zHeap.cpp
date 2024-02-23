@@ -215,66 +215,70 @@ void ZHeap::threads_do(ThreadClosure* tc) const {
   _young.threads_do(tc);
   _old.threads_do(tc);
 }
-
+// ZHeap类中处理内存不足情况的成员函数
 void ZHeap::out_of_memory() {
-  ResourceMark rm;
+  ResourceMark rm; // 标记资源使用
 
-  ZStatInc(ZCounterOutOfMemory);
-  log_info(gc)("Out Of Memory (%s)", Thread::current()->name());
+  ZStatInc(ZCounterOutOfMemory); // 增加OutOfMemory计数器
+  log_info(gc)("Out Of Memory (%s)", Thread::current()->name()); // 打印内存不足日志
 }
 
+// ZHeap类中分配页面的成员函数
 ZPage* ZHeap::alloc_page(ZPageType type, size_t size, ZAllocationFlags flags, ZPageAge age) {
-  ZPage* const page = _page_allocator.alloc_page(type, size, flags, age);
+  ZPage* const page = _page_allocator.alloc_page(type, size, flags, age); // 调用页面分配器分配页面
   if (page != nullptr) {
-    // Insert page table entry
+    // 在页面表中插入条目
     _page_table.insert(page);
   }
 
-  return page;
+  return page; // 返回分配的页面或nullptr
 }
 
+// ZHeap类中撤销页面分配的成员函数
 void ZHeap::undo_alloc_page(ZPage* page) {
-  assert(page->is_allocating(), "Invalid page state");
+  assert(page->is_allocating(), "Invalid page state"); // 断言页面处于分配状态
 
-  ZStatInc(ZCounterUndoPageAllocation);
+  ZStatInc(ZCounterUndoPageAllocation); // 增加撤销页面分配计数器
   log_trace(gc)("Undo page allocation, thread: " PTR_FORMAT " (%s), page: " PTR_FORMAT ", size: " SIZE_FORMAT,
                 p2i(Thread::current()), ZUtils::thread_name(), p2i(page), page->size());
 
-  free_page(page);
+  free_page(page); // 释放页面
 }
 
+// ZHeap类中释放页面的成员函数
 void ZHeap::free_page(ZPage* page) {
-  // Remove page table entry
+  // 从页面表中移除条目
   _page_table.remove(page);
 
   if (page->is_old()) {
-    page->verify_remset_cleared_current();
-    page->verify_remset_cleared_previous();
+    page->verify_remset_cleared_current(); // 验证当前的remembered set是否已清除
+    page->verify_remset_cleared_previous(); // 验证之前的remembered set是否已清除
   }
 
-  // Free page
+  // 释放页面
   _page_allocator.free_page(page);
 }
 
+// ZHeap类中释放空闲页面的成员函数
 size_t ZHeap::free_empty_pages(const ZArray<ZPage*>* pages) {
-  size_t freed = 0;
-  // Remove page table entries
+  size_t freed = 0; // 初始化释放的字节数为0
+  // 从页面表中移除条目
   ZArrayIterator<ZPage*> iter(pages);
   for (ZPage* page; iter.next(&page);) {
     if (page->is_old()) {
-      // The remset of pages should be clean when installed into the page
-      // cache.
+      // 在安装到页面缓存时，页面的remset应该已经被清除。
       page->remset_clear();
     }
     _page_table.remove(page);
-    freed += page->size();
+    freed += page->size(); // 累加释放的字节数
   }
 
-  // Free pages
+  // 释放页面
   _page_allocator.free_pages(pages);
 
-  return freed;
+  return freed; // 返回释放的总字节数
 }
+
 
 void ZHeap::keep_alive(oop obj) {
   const zaddress addr = to_zaddress(obj);

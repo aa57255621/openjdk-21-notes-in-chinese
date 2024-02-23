@@ -58,34 +58,35 @@ constexpr bool is_aligned(T size, A alignment) {
   return (size & alignment_mask(alignment)) == 0;
 }
 
+// 将size向下对齐到alignment的边界。
 template<typename T, typename A, ENABLE_IF(std::is_integral<T>::value)>
 constexpr T align_down(T size, A alignment) {
-  // Convert mask to T before logical_not.  Otherwise, if alignment is unsigned
-  // and smaller than T, the result of the logical_not will be zero-extended
-  // by integral promotion, and upper bits of size will be discarded.
+  // 将掩码转换为T类型，然后再进行逻辑非操作。
+  // 否则，如果alignment是无符号类型且小于T，逻辑非的结果将被整数提升，
+  // 导致size的上部位被丢弃。
   T result = size & ~T(alignment_mask(alignment));
+  // 使用assert来检查结果是否确实对齐。
   assert(is_aligned(result, alignment),
          "must be aligned: " UINT64_FORMAT, (uint64_t)result);
   return result;
 }
-
+// 将size向上对齐到alignment的边界。
 template<typename T, typename A, ENABLE_IF(std::is_integral<T>::value)>
 constexpr T align_up(T size, A alignment) {
   T adjusted = size + alignment_mask(alignment);
   return align_down(adjusted, alignment);
 }
-
-// Align down with a lower bound. If the aligning results in 0, return 'alignment'.
+// 将size向下对齐到alignment的边界，并确保结果至少为alignment。
 template <typename T, typename A>
 constexpr T align_down_bounded(T size, A alignment) {
   T aligned_size = align_down(size, alignment);
+  // 如果对齐后的值大于0，则返回对齐后的值；否则，返回alignment。
   return (aligned_size > 0) ? aligned_size : T(alignment);
 }
-
-// Align pointers and check for alignment.
-
+// 指针对齐函数，将ptr向上对齐到alignment的边界。
 template <typename T, typename A>
 inline T* align_up(T* ptr, A alignment) {
+  // 首先将指针转换为uintptr_t类型，然后调用align_up进行对齐。
   return (T*)align_up((uintptr_t)ptr, alignment);
 }
 

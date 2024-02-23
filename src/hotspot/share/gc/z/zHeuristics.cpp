@@ -33,25 +33,25 @@
 #include "utilities/powerOfTwo.hpp"
 
 void ZHeuristics::set_medium_page_size() {
-  // Set ZPageSizeMedium so that a medium page occupies at most 3.125% of the
-  // max heap size. ZPageSizeMedium is initially set to 0, which means medium
-  // pages are effectively disabled. It is adjusted only if ZPageSizeMedium
-  // becomes larger than ZPageSizeSmall.
-  const size_t min = ZGranuleSize;
-  const size_t max = ZGranuleSize * 16;
-  const size_t unclamped = MaxHeapSize * 0.03125;
-  const size_t clamped = clamp(unclamped, min, max);
-  const size_t size = round_down_power_of_2(clamped);
+  // 设置ZPageSizeMedium，使得一个中等页最多占用最大堆大小的3.125%。
+  // ZPageSizeMedium最初设置为0，这意味着中等页实际上被禁用。
+  // 它只在ZPageSizeMedium变得大于ZPageSizeSmall时进行调整。
+  const size_t min = ZGranuleSize; // 最小值等于一个granule的大小，即2MB
+  const size_t max = ZGranuleSize * 16; // 最大值等于16个granule的大小，即32MB
+  const size_t unclamped = MaxHeapSize * 0.03125; // 取堆最大容量(Xmx)的0.03125 
+  const size_t clamped = clamp(unclamped, min, max); // 使用clamp函数将未限制的大小限制在min和max之间
+  const size_t size = round_down_power_of_2(clamped); // 将限制后的大小向下舍入,到最接近的2的幂次方。比如传入11，取道小于等于的2的幂次方就是2的3次幂，也就8
 
-  if (size > ZPageSizeSmall) {
-    // Enable medium pages
-    ZPageSizeMedium             = size;
-    ZPageSizeMediumShift        = log2i_exact(ZPageSizeMedium);
-    ZObjectSizeLimitMedium      = ZPageSizeMedium / 8;
-    ZObjectAlignmentMediumShift = (int)ZPageSizeMediumShift - 13;
-    ZObjectAlignmentMedium      = 1 << ZObjectAlignmentMediumShift;
+  if (size > ZPageSizeSmall) { // size 如果大于ZPageSizeSmall，ZPageSizeSmall默认是2MB
+    // 如果计算出的size大于小页的大小，则启用中等页
+    ZPageSizeMedium             = size; // 设置中等页的大小
+    ZPageSizeMediumShift        = log2i_exact(ZPageSizeMedium); // 计算并设置中等页的大小位移
+    ZObjectSizeLimitMedium      = ZPageSizeMedium / 8; // 设置中等对象的大小限制，即中等页大小的1/8
+    ZObjectAlignmentMediumShift = (int)ZPageSizeMediumShift - 13; // 计算并设置中等对象的对齐位移
+    ZObjectAlignmentMedium      = 1 << ZObjectAlignmentMediumShift; // 计算并设置中等对象的对齐大小
   }
 }
+
 
 size_t ZHeuristics::relocation_headroom() {
   // Calculate headroom needed to avoid in-place relocation. Each worker will try

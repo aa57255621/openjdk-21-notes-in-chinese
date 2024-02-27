@@ -210,25 +210,32 @@ void JavaThread::clear_scopedValueBindings() {
   }
 }
 
+// Java虚拟机（JVM）中分配和初始化Java线程对象的方法。这个方法定义在JavaThread类中，用于创建一个新的Java线程对象，并将其与当前的JavaThread对象关联起来
 void JavaThread::allocate_threadObj(Handle thread_group, const char* thread_name,
                                     bool daemon, TRAPS) {
+  // 确保传入的线程组对象不为空
   assert(thread_group.not_null(), "thread group should be specified");
+  // 确保Java线程对象还未被创建
   assert(threadObj() == nullptr, "should only create Java thread object once");
 
+  // 获取Thread类的InstanceKlass对象
   InstanceKlass* ik = vmClasses::Thread_klass();
+  // 确保Thread类已经被初始化
   assert(ik->is_initialized(), "must be");
+  // 分配一个新的Java线程对象实例
   instanceHandle thread_oop = ik->allocate_instance_handle(CHECK);
 
-  // We are called from jni_AttachCurrentThread/jni_AttachCurrentThreadAsDaemon.
-  // We cannot use JavaCalls::construct_new_instance because the java.lang.Thread
-  // constructor calls Thread.current(), which must be set here.
+  // 设置当前Java线程对象与JavaThread的关联
   java_lang_Thread::set_thread(thread_oop(), this);
+  // 设置线程对象的句柄
   set_threadOopHandles(thread_oop());
 
   JavaValue result(T_VOID);
+  // 如果指定了线程名称
   if (thread_name != nullptr) {
+    // 创建一个新的字符串对象，作为线程的名称
     Handle name = java_lang_String::create_from_str(thread_name, CHECK);
-    // Thread gets assigned specified name and null target
+    // 调用线程对象的初始化方法，传入线程组和线程名称
     JavaCalls::call_special(&result,
                             thread_oop,
                             ik,
@@ -238,8 +245,7 @@ void JavaThread::allocate_threadObj(Handle thread_group, const char* thread_name
                             name,
                             CHECK);
   } else {
-    // Thread gets assigned name "Thread-nnn" and null target
-    // (java.lang.Thread doesn't have a constructor taking only a ThreadGroup argument)
+    // 如果没有指定线程名称，使用默认的名称"Thread-nnn"
     JavaCalls::call_special(&result,
                             thread_oop,
                             ik,
@@ -249,12 +255,15 @@ void JavaThread::allocate_threadObj(Handle thread_group, const char* thread_name
                             Handle(),
                             CHECK);
   }
+  // 设置线程的优先级为默认优先级
   os::set_priority(this, NormPriority);
 
+  // 如果是守护线程，设置线程对象为守护线程
   if (daemon) {
     java_lang_Thread::set_daemon(thread_oop());
   }
 }
+
 
 // ======= JavaThread ========
 
@@ -267,12 +276,17 @@ bool jvmci_counters_include(JavaThread* thread) {
 }
 
 void JavaThread::collect_counters(jlong* array, int length) {
+  // 确认传入的数组长度等于JVMCI计数器的大小
   assert(length == JVMCICounterSize, "wrong value");
+  // 将当前线程的旧计数器值复制到传入的数组中
   for (int i = 0; i < length; i++) {
     array[i] = _jvmci_old_thread_counters[i];
   }
+  // 遍历所有线程
   for (JavaThread* tp : ThreadsListHandle()) {
+    // 如果应该包括这个线程的计数器
     if (jvmci_counters_include(tp)) {
+      // 将这个线程的计数器值累加到传入的数组中
       for (int i = 0; i < length; i++) {
         array[i] += tp->_jvmci_counters[i];
       }
@@ -280,26 +294,35 @@ void JavaThread::collect_counters(jlong* array, int length) {
   }
 }
 
+
 // Attempt to enlarge the array for per thread counters.
 jlong* resize_counters_array(jlong* old_counters, int current_size, int new_size) {
+  // 分配一个新的计数器数组
   jlong* new_counters = NEW_C_HEAP_ARRAY_RETURN_NULL(jlong, new_size, mtJVMCI);
   if (new_counters == nullptr) {
+    // 如果分配失败，返回nullptr
     return nullptr;
   }
   if (old_counters == nullptr) {
+    // 如果旧的计数器数组为空，使用新分配的数组，并将其初始化为0
     old_counters = new_counters;
     memset(old_counters, 0, sizeof(jlong) * new_size);
   } else {
+    // 如果旧的计数器数组不为空，复制旧数组的内容到新数组
     for (int i = 0; i < MIN2((int) current_size, new_size); i++) {
       new_counters[i] = old_counters[i];
     }
+    // 如果新数组的尺寸大于旧数组，将新数组的剩余部分初始化为0
     if (new_size > current_size) {
       memset(new_counters + current_size, 0, sizeof(jlong) * (new_size - current_size));
     }
+    // 释放旧的计数器数组
     FREE_C_HEAP_ARRAY(jlong, old_counters);
   }
+  // 返回新的计数器数组
   return new_counters;
 }
+
 
 // Attempt to enlarge the array for per thread counters.
 bool JavaThread::resize_counters(int current_size, int new_size) {
@@ -522,109 +545,104 @@ JavaThread::JavaThread(bool is_attaching_via_jni) : JavaThread() {
 
 
 // interrupt support
-
+// 确保调用线程的指针没有被丢弃，即线程仍然有效。
+// 对于Windows平台，设置线程的中断状态为true。
+// 对于Thread.sleep，JSR166 LockSupport.park，ObjectMonitor和JvmtiRawMonitor，唤醒线程。
 void JavaThread::interrupt() {
-  // All callers should have 'this' thread protected by a
-  // ThreadsListHandle so that it cannot terminate and deallocate
-  // itself.
-  debug_only(check_for_dangling_thread_pointer(this);)
-
-  // For Windows _interrupt_event
-  WINDOWS_ONLY(osthread()->set_interrupted(true);)
-
-  // For Thread.sleep
+  // 确保调用线程的指针没有被丢弃，即线程仍然有效
+  debug_only(check_for_dangling_thread_pointer(this););
+  // 对于Windows平台，设置线程的中断状态为true
+  WINDOWS_ONLY(osthread()->set_interrupted(true););
+  // 对于Thread.sleep，唤醒线程
   _SleepEvent->unpark();
-
-  // For JSR166 LockSupport.park
+  // 对于JSR166 LockSupport.park，唤醒线程
   parker()->unpark();
-
-  // For ObjectMonitor and JvmtiRawMonitor
+  // 对于ObjectMonitor和JvmtiRawMonitor，唤醒线程
   _ParkEvent->unpark();
 }
 
-
+// 确保调用线程的指针没有被丢弃，即线程仍然有效。
+// 如果线程对象为null，则不可能被中断，返回false。
+// 检查线程是否被中断。
+// 如果需要清除中断状态，并且线程确实被中断了，设置线程的中断状态为false。
+// 返回线程的中断状态。
 bool JavaThread::is_interrupted(bool clear_interrupted) {
-  debug_only(check_for_dangling_thread_pointer(this);)
-
+  // 确保调用线程的指针没有被丢弃，即线程仍然有效
+  debug_only(check_for_dangling_thread_pointer(this););
+  // 如果线程对象为null，则不可能被中断
   if (_threadObj.peek() == nullptr) {
-    // If there is no j.l.Thread then it is impossible to have
-    // been interrupted. We can find null during VM initialization
-    // or when a JNI thread is still in the process of attaching.
-    // In such cases this must be the current thread.
+    // 断言当前线程是调用线程
     assert(this == Thread::current(), "invariant");
     return false;
   }
 
+  // 检查线程是否被中断
   bool interrupted = java_lang_Thread::interrupted(threadObj());
 
-  // NOTE that since there is no "lock" around the interrupt and
-  // is_interrupted operations, there is the possibility that the
-  // interrupted flag will be "false" but that the
-  // low-level events will be in the signaled state. This is
-  // intentional. The effect of this is that Object.wait() and
-  // LockSupport.park() will appear to have a spurious wakeup, which
-  // is allowed and not harmful, and the possibility is so rare that
-  // it is not worth the added complexity to add yet another lock.
-  // For the sleep event an explicit reset is performed on entry
-  // to JavaThread::sleep, so there is no early return. It has also been
-  // recommended not to put the interrupted flag into the "event"
-  // structure because it hides the issue.
-  // Also, because there is no lock, we must only clear the interrupt
-  // state if we are going to report that we were interrupted; otherwise
-  // an interrupt that happens just after we read the field would be lost.
+  // 如果需要清除中断状态，并且线程确实被中断了
   if (interrupted && clear_interrupted) {
+    // 断言只有当前线程才能清除中断状态
     assert(this == Thread::current(), "only the current thread can clear");
+    // 设置线程的中断状态为false
     java_lang_Thread::set_interrupted(threadObj(), false);
-    WINDOWS_ONLY(osthread()->set_interrupted(false);)
+    // 对于Windows平台，清除线程的中断状态
+    WINDOWS_ONLY(osthread()->set_interrupted(false););
   }
 
+  // 返回线程的中断状态
   return interrupted;
 }
 
+// 检查线程是否已经终止并且虚拟机已经退出。
+// 如果是，则设置线程状态为在虚拟机中，并尝试获取线程锁。
+// 通常情况下，这应该不会被执行到，因为这是一个不应该发生的状态。
 void JavaThread::block_if_vm_exited() {
   if (_terminated == _vm_exited) {
-    // _vm_exited is set at safepoint, and Threads_lock is never released
-    // so we will block here forever.
-    // Here we can be doing a jump from a safe state to an unsafe state without
-    // proper transition, but it happens after the final safepoint has begun so
-    // this jump won't cause any safepoint problems.
+    // 如果线程已经终止并且虚拟机已经退出，则永久阻塞
+    // _vm_exited在安全点上设置，并且Threads_lock永远不会释放，所以我们将永远阻塞在这里。
+    // 在这里，我们可以从安全状态跳转到不安全状态而没有适当的过渡，但它发生在最终安全点开始之后，
+    // 所以这个跳跃不会导致任何安全点问题。
     set_thread_state(_thread_in_vm);
     Threads_lock->lock();
-    ShouldNotReachHere();
+    ShouldNotReachHere(); // 这应该不会被执行到
   }
 }
 
+// 设置JNI附加状态为非JNI附加。
+// 设置线程的入口点。
+// 根据入口点类型设置线程类型。
+// 创建本地线程。
+// 检查是否由于内存不足而导致线程创建失败。
+// 线程创建后，它仍然是被挂起的，需要由创建者显式启动，并添加到线程列表中。
 JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) : JavaThread() {
   _jni_attach_state = _not_attaching_via_jni;
   set_entry_point(entry_point);
-  // Create the native thread itself.
+  // 创建本地线程本身。
   // %note runtime_23
   os::ThreadType thr_type = os::java_thread;
-  thr_type = entry_point == &CompilerThread::thread_entry ? os::compiler_thread :
-                                                            os::java_thread;
+  // 如果是编译器线程，则设置线程类型为编译器线程
+  thr_type = entry_point == &CompilerThread::thread_entry ? os::compiler_thread : os::java_thread;
   os::create_thread(this, thr_type, stack_sz);
-  // The _osthread may be null here because we ran out of memory (too many threads active).
-  // We need to throw and OutOfMemoryError - however we cannot do this here because the caller
-  // may hold a lock and all locks must be unlocked before throwing the exception (throwing
-  // the exception consists of creating the exception object & initializing it, initialization
-  // will leave the VM via a JavaCall and then all locks must be unlocked).
+  // _osthread可能在这里是null，因为可能内存不足（太多活跃线程）。
+  // 我们需要抛出一个OutOfMemoryError，但是我们不能在这里这样做，因为调用者可能持有一个锁，
+  // 在抛出异常之前所有锁必须被释放（抛出异常包括创建异常对象&初始化它，初始化将离开VM通过JavaCall，
+  // 然后所有锁必须被解锁）。
   //
-  // The thread is still suspended when we reach here. Thread must be explicit started
-  // by creator! Furthermore, the thread must also explicitly be added to the Threads list
-  // by calling Threads:add. The reason why this is not done here, is because the thread
-  // object must be fully initialized (take a look at JVM_Start)
+  // 当我们到达这里时，线程仍然是被挂起的。线程必须由创建者显式启动！
+  // 此外，线程还必须通过调用Threads:add显式添加到线程列表中。
+  // 这里的原因是因为线程对象必须完全初始化（查看JVM_Start）
 }
 
+// JavaThread类的析构函数。析构函数在对象被销毁时自动调用，用于清理对象所占用的资源
 JavaThread::~JavaThread() {
-
-  // Enqueue OopHandles for release by the service thread.
+  // 将OopHandles（即Java对象句柄）加入释放队列，由服务线程释放
   add_oop_handles_for_release();
 
-  // Return the sleep event to the free list
+  // 将睡眠事件返回到空闲列表，以供后续重用
   ParkEvent::Release(_SleepEvent);
   _SleepEvent = nullptr;
 
-  // Free any remaining  previous UnrollBlock
+  // 释放任何剩余的之前的UnrollBlock
   vframeArray* old_array = vframe_array_last();
 
   if (old_array != nullptr) {
@@ -634,26 +652,27 @@ JavaThread::~JavaThread() {
     delete old_array;
   }
 
+  // 获取延迟更新对象
   JvmtiDeferredUpdates* updates = deferred_updates();
   if (updates != nullptr) {
-    // This can only happen if thread is destroyed before deoptimization occurs.
+    // 如果线程在去优化之前被销毁，这将发生
     assert(updates->count() > 0, "Updates holder not deleted");
-    // free deferred updates.
+    // 释放延迟更新
     delete updates;
     set_deferred_updates(nullptr);
   }
 
-  // All Java related clean up happens in exit
+  // 所有与Java相关的清理工作在exit中发生
   ThreadSafepointState::destroy(this);
   if (_thread_stat != nullptr) delete _thread_stat;
 
+  // 如果包括JVMCI支持，释放JVMCI计数器数组
 #if INCLUDE_JVMCI
   if (JVMCICounterSize > 0) {
     FREE_C_HEAP_ARRAY(jlong, _jvmci_counters);
   }
 #endif // INCLUDE_JVMCI
 }
-
 
 // First JavaThread specific code executed by a new Java thread.
 void JavaThread::pre_run() {
@@ -664,43 +683,45 @@ void JavaThread::pre_run() {
 // by subclasses, instead different subclasses define a different "entry_point"
 // which defines the actual logic for that kind of thread.
 void JavaThread::run() {
-  // initialize thread-local alloc buffer related fields
+  // 初始化与线程本地分配缓冲区相关的字段
   initialize_tlab();
 
+  // 创建栈溢出保护页
   _stack_overflow_state.create_stack_guard_pages();
 
+  // 缓存全局变量
   cache_global_variables();
 
-  // Thread is now sufficiently initialized to be handled by the safepoint code as being
-  // in the VM. Change thread state from _thread_new to _thread_in_vm
+  // 线程现在已足够初始化，可以被安全点代码处理为在虚拟机中。
+  // 将线程状态从_thread_new更改为_thread_in_vm
   assert(this->thread_state() == _thread_new, "wrong thread state");
   set_thread_state(_thread_in_vm);
 
-  // Before a thread is on the threads list it is always safe, so after leaving the
-  // _thread_new we should emit a instruction barrier. The distance to modified code
-  // from here is probably far enough, but this is consistent and safe.
+  // 在线程进入线程列表之前，它始终是安全的，因此在离开_thread_new之后，我们应该发出一个指令屏障。
+  // 从这里到修改过的代码的距离可能足够远，但这是一致的且安全的。
   OrderAccess::cross_modify_fence();
 
+  // 确保当前线程是this，并且不持有任何锁
   assert(JavaThread::current() == this, "sanity check");
   assert(!Thread::current()->owns_locks(), "sanity check");
 
+  // DTRACE是一个用于调试和性能监控的工具，这里是一个探针，用于标记线程的开始
   DTRACE_THREAD_PROBE(start, this);
 
-  // This operation might block. We call that after all safepoint checks for a new thread has
-  // been completed.
+  // 这个操作可能会阻塞。我们在完成所有新线程的安全点检查之后调用它。
   set_active_handles(JNIHandleBlock::allocate_block());
 
+  // 如果JvmtiExport指示应该发布线程生命周期事件，则发布线程开始事件
   if (JvmtiExport::should_post_thread_life()) {
     JvmtiExport::post_thread_start(this);
-
   }
 
+  // 如果设置了AlwaysPreTouchStacks，则预触摸堆栈
   if (AlwaysPreTouchStacks) {
     pretouch_stack();
   }
 
-  // We call another function to do the rest so we are sure that the stack addresses used
-  // from there will be lower than the stack base just computed.
+  // 我们调用另一个函数来完成剩余的工作，以确保从那里使用的堆栈地址将低于刚刚计算的堆栈基址。
   thread_main_inner();
 }
 
@@ -708,8 +729,8 @@ void JavaThread::thread_main_inner() {
   assert(JavaThread::current() == this, "sanity check");
   assert(_threadObj.peek() != nullptr, "just checking");
 
-  // Execute thread entry point unless this thread has a pending exception.
-  // Note: Due to JVMTI StopThread we can have pending exceptions already!
+  // 除非该线程有一个待定的异常，否则执行线程入口点
+  // 注意：由于JVMTI StopThread，我们可能已经有了待定的异常！
   if (!this->has_pending_exception()) {
     {
       ResourceMark rm(this);
@@ -721,31 +742,29 @@ void JavaThread::thread_main_inner() {
 
   DTRACE_THREAD_PROBE(stop, this);
 
-  // Cleanup is handled in post_run()
+  // 清理工作在post_run()中处理
 }
 
 // Shared teardown for all JavaThreads
 void JavaThread::post_run() {
   this->exit(false);
   this->unregister_thread_stack_with_NMT();
-  // Defer deletion to here to ensure 'this' is still referenceable in call_run
-  // for any shared tear-down.
+  // 延迟删除到此处，以确保在call_run中的任何共享清理中'this'仍然可引用
   this->smr_delete();
 }
 
 static void ensure_join(JavaThread* thread) {
-  // We do not need to grab the Threads_lock, since we are operating on ourself.
+  // 无需获取Threads_lock，因为我们正在操作我们自己。
   Handle threadObj(thread, thread->threadObj());
   assert(threadObj.not_null(), "java thread object must exist");
   ObjectLocker lock(threadObj, thread);
-  // Thread is exiting. So set thread_status field in  java.lang.Thread class to TERMINATED.
+  // 线程正在退出。因此，在java.lang.Thread类中设置thread_status字段为TERMINATED。
   java_lang_Thread::set_thread_status(threadObj(), JavaThreadStatus::TERMINATED);
-  // Clear the native thread instance - this makes isAlive return false and allows the join()
-  // to complete once we've done the notify_all below. Needs a release() to obey Java Memory Model
-  // requirements.
+  // 清除本地线程实例 - 这使得isAlive返回false，并允许join()在下面的notify_all完成。
+  // 需要遵守Java内存模型要求的一个释放()。
   java_lang_Thread::release_set_thread(threadObj(), nullptr);
   lock.notify_all(thread);
-  // Ignore pending exception, since we are exiting anyway
+  // 忽略待定的异常，因为我们无论如何都要退出
   thread->clear_pending_exception();
 }
 
@@ -759,6 +778,7 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
   assert(this == JavaThread::current(), "thread consistency check");
   assert(!is_exiting(), "should not be exiting or terminated already");
 
+  // 初始化退出阶段的计时器
   elapsedTimer _timer_exit_phase1;
   elapsedTimer _timer_exit_phase2;
   elapsedTimer _timer_exit_phase3;
@@ -768,16 +788,21 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     _timer_exit_phase1.start();
   }
 
+  // 创建处理标记，用于处理异常
   HandleMark hm(this);
+  // 获取待定的异常
   Handle uncaught_exception(this, this->pending_exception());
+  // 清除待定的异常
   this->clear_pending_exception();
+  // 获取线程对象句柄
   Handle threadObj(this, this->threadObj());
+  // 确保线程对象不为空
   assert(threadObj.not_null(), "Java thread object should be created");
 
   if (!destroy_vm) {
     if (uncaught_exception.not_null()) {
       EXCEPTION_MARK;
-      // Call method Thread.dispatchUncaughtException().
+      // 如果有未捕获的异常，则调用Thread.dispatchUncaughtException()
       Klass* thread_klass = vmClasses::Thread_klass();
       JavaValue result(T_VOID);
       JavaCalls::call_virtual(&result,
@@ -786,6 +811,7 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
                               vmSymbols::throwable_void_signature(),
                               uncaught_exception,
                               THREAD);
+      // 如果调用后仍有待定的异常，则处理异常
       if (HAS_PENDING_EXCEPTION) {
         ResourceMark rm(this);
         jio_fprintf(defaultStream::error_stream(),
@@ -798,10 +824,7 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     }
 
     if (!is_Compiler_thread()) {
-      // We have finished executing user-defined Java code and now have to do the
-      // implementation specific clean-up by calling Thread.exit(). We prevent any
-      // asynchronous exceptions from being delivered while in Thread.exit()
-      // to ensure the clean-up is not corrupted.
+      // 如果是用户定义的Java代码执行完毕，调用Thread.exit()进行特定清理
       NoAsyncExceptionDeliveryMark _no_async(this);
 
       EXCEPTION_MARK;
@@ -815,24 +838,20 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
       CLEAR_PENDING_EXCEPTION;
     }
 
-    // notify JVMTI
+    // 通知JVMTI线程生命周期事件
     if (JvmtiExport::should_post_thread_life()) {
       JvmtiExport::post_thread_end(this);
     }
   } else {
-    // before_exit() has already posted JVMTI THREAD_END events
+    // 如果destroy_vm为true，则跳过上述步骤
   }
 
-  // Cleanup any pending async exception now since we cannot access oops after
-  // BarrierSet::barrier_set()->on_thread_detach() has been executed.
+  // 清理任何待定的异步异常
   if (has_async_exception_condition()) {
     handshake_state()->clean_async_exception_operation();
   }
 
-  // The careful dance between thread suspension and exit is handled here.
-  // Since we are in thread_in_vm state and suspension is done with handshakes,
-  // we can just put in the exiting state and it will be correctly handled.
-  // Also, no more async exceptions will be added to the queue after this point.
+  // 设置线程状态为_thread_exiting，表示正在退出
   set_terminated(_thread_exiting);
   ThreadService::current_thread_exiting(this, is_daemon(threadObj()));
 
@@ -841,84 +860,80 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     _timer_exit_phase2.start();
   }
 
-  // Capture daemon status before the thread is marked as terminated.
+  // 在线程被标记为终止之前，获取守护线程状态
   bool daemon = is_daemon(threadObj());
 
   // Notify waiters on thread object. This has to be done after exit() is called
   // on the thread (if the thread is the last thread in a daemon ThreadGroup the
   // group should have the destroyed bit set before waiters are notified).
+  // 确保线程对象上的等待线程得到通知
   ensure_join(this);
+  // 断言确保_ensure_join方法已经清除待定的异常
   assert(!this->has_pending_exception(), "ensure_join should have cleared");
 
   if (log_is_enabled(Debug, os, thread, timer)) {
     _timer_exit_phase2.stop();
     _timer_exit_phase3.start();
   }
-  // 6282335 JNI DetachCurrentThread spec states that all Java monitors
-  // held by this thread must be released. The spec does not distinguish
-  // between JNI-acquired and regular Java monitors. We can only see
-  // regular Java monitors here if monitor enter-exit matching is broken.
-  //
-  // ensure_join() ignores IllegalThreadStateExceptions, and so does
-  // ObjectSynchronizer::release_monitors_owned_by_thread().
+
+  // 确保线程释放所有持有的Java监视器
   if (exit_type == jni_detach) {
-    // Sanity check even though JNI DetachCurrentThread() would have
-    // returned JNI_ERR if there was a Java frame. JavaThread exit
-    // should be done executing Java code by the time we get here.
+    // 确保在退出时没有Java帧，否则JNI DetachCurrentThread将返回错误
     assert(!this->has_last_Java_frame(),
-           "should not have a Java frame when detaching or exiting");
+          "should not have a Java frame when detaching or exiting");
     ObjectSynchronizer::release_monitors_owned_by_thread(this);
+    // 断言确保释放监视器后没有待定的异常
     assert(!this->has_pending_exception(), "release_monitors should have cleared");
   }
 
-  // Since above code may not release JNI monitors and if someone forgot to do an
-  // JNI monitorexit, held count should be equal jni count.
-  // Consider scan all object monitor for this owner if JNI count > 0 (at least on detach).
+  // 确保监视器计数正确，JNI监视器计数与普通监视器计数应该相等
   assert(this->held_monitor_count() == this->jni_monitor_count(),
-         "held monitor count should be equal to jni: " INT64_FORMAT " != " INT64_FORMAT,
-         (int64_t)this->held_monitor_count(), (int64_t)this->jni_monitor_count());
+        "held monitor count should be equal to jni: " INT64_FORMAT " != " INT64_FORMAT,
+        (int64_t)this->held_monitor_count(), (int64_t)this->jni_monitor_count());
+  // 如果JNI监视器计数大于0，则记录调试信息，表明线程在退出时仍然持有JNI监视器
   if (CheckJNICalls && this->jni_monitor_count() > 0) {
-    // We would like a fatal here, but due to we never checked this before there
-    // is a lot of tests which breaks, even with an error log.
     log_debug(jni)("JavaThread %s (tid: " UINTX_FORMAT ") with Objects still locked by JNI MonitorEnter.",
       exit_type == JavaThread::normal_exit ? "exiting" : "detaching", os::current_thread_id());
   }
 
-  // These things needs to be done while we are still a Java Thread. Make sure that thread
-  // is in a consistent state, in case GC happens
+  // 在GC发生时确保线程处于一致状态
   JFR_ONLY(Jfr::on_thread_exit(this);)
 
+  // 如果有活动句柄，则释放它们
   if (active_handles() != nullptr) {
     JNIHandleBlock* block = active_handles();
     set_active_handles(nullptr);
     JNIHandleBlock::release_block(block);
   }
 
+  // 如果有空闲句柄块，则释放它们
   if (free_handle_block() != nullptr) {
     JNIHandleBlock* block = free_handle_block();
     set_free_handle_block(nullptr);
     JNIHandleBlock::release_block(block);
   }
 
-  // These have to be removed while this is still a valid thread.
+  // 删除栈保护页
   _stack_overflow_state.remove_stack_guard_pages();
 
+  // 如果使用了TLAB，则退役TLAB
   if (UseTLAB) {
     tlab().retire();
   }
 
+  // 如果JVMTI环境可能存在，则清理线程
   if (JvmtiEnv::environments_might_exist()) {
     JvmtiExport::cleanup_thread(this);
   }
 
-  // We need to cache the thread name for logging purposes below as once
-  // we have called on_thread_detach this thread must not access any oops.
+  // 在调用on_thread_detach后，线程不应再访问任何oops，因此需要缓存线程名称
   char* thread_name = nullptr;
   if (log_is_enabled(Debug, os, thread, timer)) {
     ResourceMark rm(this);
     thread_name = os::strdup(name());
   }
 
+  // 记录线程退出信息
   log_info(os, thread)("JavaThread %s (tid: " UINTX_FORMAT ").",
     exit_type == JavaThread::normal_exit ? "exiting" : "detaching",
     os::current_thread_id());
@@ -927,8 +942,8 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
     _timer_exit_phase3.stop();
     _timer_exit_phase4.start();
   }
-
 #if INCLUDE_JVMCI
+  // 如果启用了JVMCI，则处理JVMCI计数器
   if (JVMCICounterSize > 0) {
     if (jvmci_counters_include(this)) {
       for (int i = 0; i < JVMCICounterSize; i++) {
@@ -938,50 +953,56 @@ void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
   }
 #endif // INCLUDE_JVMCI
 
-  // Remove from list of active threads list, and notify VM thread if we are the last non-daemon thread.
-  // We call BarrierSet::barrier_set()->on_thread_detach() here so no touching of oops after this point.
+  // 从活动线程列表中移除当前线程，并通知VM线程如果我们是最后的非守护线程
   Threads::remove(this, daemon);
 
   if (log_is_enabled(Debug, os, thread, timer)) {
     _timer_exit_phase4.stop();
     log_debug(os, thread, timer)("name='%s'"
-                                 ", exit-phase1=" JLONG_FORMAT
-                                 ", exit-phase2=" JLONG_FORMAT
-                                 ", exit-phase3=" JLONG_FORMAT
-                                 ", exit-phase4=" JLONG_FORMAT,
-                                 thread_name,
-                                 _timer_exit_phase1.milliseconds(),
-                                 _timer_exit_phase2.milliseconds(),
-                                 _timer_exit_phase3.milliseconds(),
-                                 _timer_exit_phase4.milliseconds());
+                                  ", exit-phase1=" JLONG_FORMAT
+                                  ", exit-phase2=" JLONG_FORMAT
+                                  ", exit-phase3=" JLONG_FORMAT
+                                  ", exit-phase4=" JLONG_FORMAT,
+                                  thread_name,
+                                  _timer_exit_phase1.milliseconds(),
+                                  _timer_exit_phase2.milliseconds(),
+                                  _timer_exit_phase3.milliseconds(),
+                                  _timer_exit_phase4.milliseconds());
     os::free(thread_name);
   }
+
 }
 
 void JavaThread::cleanup_failed_attach_current_thread(bool is_daemon) {
+  // 如果存在活动句柄，则释放它们
   if (active_handles() != nullptr) {
     JNIHandleBlock* block = active_handles();
     set_active_handles(nullptr);
     JNIHandleBlock::release_block(block);
   }
 
+  // 如果存在空闲句柄块，则释放它们
   if (free_handle_block() != nullptr) {
     JNIHandleBlock* block = free_handle_block();
     set_free_handle_block(nullptr);
     JNIHandleBlock::release_block(block);
   }
 
-  // These have to be removed while this is still a valid thread.
+  // 删除栈保护页
   _stack_overflow_state.remove_stack_guard_pages();
 
+  // 如果使用了TLAB，则退役TLAB
   if (UseTLAB) {
     tlab().retire();
   }
 
+  // 从活动线程列表中移除当前线程，并通知VM线程如果我们是最后的非守护线程
   Threads::remove(this, is_daemon);
+  // 删除当前线程
   this->smr_delete();
 }
 
+// active方法返回当前活跃的JavaThread对象。如果当前线程是Java线程，则直接返回。如果当前线程是VM线程，则返回调用VM操作的Java线程。
 JavaThread* JavaThread::active() {
   Thread* thread = Thread::current();
   if (thread->is_Java_thread()) {
@@ -994,6 +1015,8 @@ JavaThread* JavaThread::active() {
   }
 }
 
+// is_lock_owned方法检查当前线程是否拥有指定的地址所表示的锁。它首先检查Thread类中是否拥有锁，然后检查所有监视器块，
+// 看看是否有监视器包含指定的地址。如果找到，则返回true，表示线程拥有锁；否则返回false
 bool JavaThread::is_lock_owned(address adr) const {
   assert(LockingMode != LM_LIGHTWEIGHT, "should not be called with new lightweight locking");
   if (Thread::is_lock_owned(adr)) return true;
@@ -1039,7 +1062,7 @@ void JavaThread::handle_special_runtime_exit_condition() {
 
 
 // Asynchronous exceptions support
-//
+// 用于处理异步异常。异步异常是指在Java线程执行过程中发生的异常，这些异常通常是由于外部事件（如I/O操作）引起的
 void JavaThread::handle_async_exception(oop java_throwable) {
   assert(java_throwable != nullptr, "should have an _async_exception to throw");
   assert(!is_at_poll_safepoint(), "should have never called this method");
@@ -1047,10 +1070,9 @@ void JavaThread::handle_async_exception(oop java_throwable) {
   if (has_last_Java_frame()) {
     frame f = last_frame();
     if (f.is_runtime_frame()) {
-      // If the topmost frame is a runtime stub, then we are calling into
-      // OptoRuntime from compiled code. Some runtime stubs (new, monitor_exit..)
-      // must deoptimize the caller before continuing, as the compiled exception
-      // handler table may not be valid.
+      // 如果最顶层的帧是运行时桩，那么我们是从编译后的代码中调用OptoRuntime。
+      // 一些运行时桩（new, monitor_exit等）在继续执行之前必须去优化调用者，
+      // 因为编译后的异常处理表可能无效。
       RegisterMap reg_map(this,
                           RegisterMap::UpdateMap::skip,
                           RegisterMap::ProcessFrames::include,
@@ -1062,7 +1084,7 @@ void JavaThread::handle_async_exception(oop java_throwable) {
     }
   }
 
-  // We cannot call Exceptions::_throw(...) here because we cannot block
+  // 我们不能在这里调用Exceptions::_throw()，因为我们不能阻塞
   set_pending_exception(java_throwable, __FILE__, __LINE__);
 
   clear_scopedValueBindings();
@@ -1081,27 +1103,26 @@ void JavaThread::handle_async_exception(oop java_throwable) {
 }
 
 void JavaThread::install_async_exception(AsyncExceptionHandshake* aeh) {
-  // Do not throw asynchronous exceptions against the compiler thread
-  // or if the thread is already exiting.
+  // 不要对编译器线程或正在退出的线程抛出异步异常
   if (!can_call_java() || is_exiting()) {
     delete aeh;
     return;
   }
 
   oop exception = aeh->exception();
-  Handshake::execute(aeh, this);  // Install asynchronous handshake
+  Handshake::execute(aeh, this);  // 安装异步握手
 
   ResourceMark rm;
   if (log_is_enabled(Info, exceptions)) {
     log_info(exceptions)("Pending Async. exception installed of type: %s",
                          InstanceKlass::cast(exception->klass())->external_name());
   }
-  // for AbortVMOnException flag
+  // 为了AbortVMOnException标志
   Exceptions::debug_check_abort(exception->klass()->external_name());
 
   oop vt_oop = vthread();
   if (vt_oop == nullptr || !vt_oop->is_a(vmClasses::BaseVirtualThread_klass())) {
-    // Interrupt thread so it will wake up from a potential wait()/sleep()/park()
+    // 中断线程，以便它从可能的等待()/睡眠()/park()中唤醒
     java_lang_Thread::set_interrupted(threadObj(), true);
     this->interrupt();
   }
@@ -1171,7 +1192,8 @@ bool JavaThread::java_resume() {
 // handshake safe, the other thread can complete the handshake used to synchronize
 // with this thread and then perform the reallocation and relocking.
 // See EscapeBarrier::sync_and_suspend_*()
-
+// JVM在执行Java代码时，可能会发现某些对象已经不再需要，从而释放这些对象的内存。
+// 这个过程可能需要一些时间，特别是在堆内存很大的情况下。wait_for_object_deoptimization方法允许线程在去优化过程中等待，直到去优化完成
 void JavaThread::wait_for_object_deoptimization() {
   assert(!has_last_Java_frame() || frame_anchor()->walkable(), "should have walkable stack");
   assert(this == Thread::current(), "invariant");
@@ -1179,16 +1201,15 @@ void JavaThread::wait_for_object_deoptimization() {
   bool spin_wait = os::is_MP();
   do {
     ThreadBlockInVM tbivm(this, true /* allow_suspend */);
-    // Wait for object deoptimization if requested.
+    // 如果请求了等待对象去优化，则等待。
     if (spin_wait) {
-      // A single deoptimization is typically very short. Microbenchmarks
-      // showed 5% better performance when spinning.
+      // 单个去优化通常非常短暂。微基准测试显示，当自旋时性能提高了5%。
       const uint spin_limit = 10 * SpinYield::default_spin_limit;
       SpinYield spin(spin_limit);
       for (uint i = 0; is_obj_deopt_suspend() && i < spin_limit; i++) {
         spin.wait();
       }
-      // Spin just once
+      // 只自旋一次
       spin_wait = false;
     } else {
       MonitorLocker ml(this, EscapeBarrier_lock, Monitor::_no_safepoint_check_flag);
@@ -1196,8 +1217,7 @@ void JavaThread::wait_for_object_deoptimization() {
         ml.wait();
       }
     }
-    // A handshake for obj. deoptimization suspend could have been processed so
-    // we must check after processing.
+    // 在处理握手后，必须再次检查。
   } while (is_obj_deopt_suspend());
 }
 
@@ -1237,20 +1257,21 @@ void JavaThread::check_special_condition_for_native_trans(JavaThread *thread) {
 #ifndef PRODUCT
 // Deoptimization
 // Function for testing deoptimization
+// 用于去优化Java线程的执行栈。去优化是一种优化技术，用于撤销之前的优化，通常在某些条件发生改变时进行。
+// 例如，如果一个对象被提前释放，与其相关的优化可能不再有效，因此需要去优化。
 void JavaThread::deoptimize() {
   StackFrameStream fst(this, false /* update */, true /* process_frames */);
-  bool deopt = false;           // Dump stack only if a deopt actually happens.
+  bool deopt = false;           // 只有在实际发生去优化时才转储堆栈。
   bool only_at = strlen(DeoptimizeOnlyAt) > 0;
-  // Iterate over all frames in the thread and deoptimize
+  // 遍历线程中的所有帧并去优化
   for (; !fst.is_done(); fst.next()) {
     if (fst.current()->can_be_deoptimized()) {
 
       if (only_at) {
-        // Deoptimize only at particular bcis.  DeoptimizeOnlyAt
-        // consists of comma or carriage return separated numbers so
-        // search for the current bci in that string.
+        // 仅在特定的bci处去优化。DeoptimizeOnlyAt由逗号或换行符分隔的数字组成，
+        // 因此搜索当前bci是否在该字符串中。
         address pc = fst.current()->pc();
-        nmethod* nm =  (nmethod*) fst.current()->cb();
+        nmethod* nm = (nmethod*) fst.current()->cb();
         ScopeDesc* sd = nm->scope_desc_at(pc);
         char buffer[8];
         jio_snprintf(buffer, sizeof(buffer), "%d", sd->bci());
@@ -1259,7 +1280,7 @@ void JavaThread::deoptimize() {
         while (found != nullptr) {
           if ((found[len] == ',' || found[len] == '\n' || found[len] == '\0') &&
               (found == DeoptimizeOnlyAt || found[-1] == ',' || found[-1] == '\n')) {
-            // Check that the bci found is bracketed by terminators.
+            // 检查找到的bci是否由终结符括起来。
             break;
           }
           found = strstr(found + 1, buffer);
@@ -1270,7 +1291,7 @@ void JavaThread::deoptimize() {
       }
 
       if (DebugDeoptimization && !deopt) {
-        deopt = true; // One-time only print before deopt
+        deopt = true; // 仅在去优化前打印一次
         tty->print_cr("[BEFORE Deoptimization]");
         trace_frames();
         trace_stack();
@@ -1646,22 +1667,11 @@ const char* JavaThread::name_for(oop thread_obj) {
 }
 
 void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
-
   assert(Threads_lock->owner() == Thread::current(), "must have threads lock");
   assert(NoPriority <= prio && prio <= MaxPriority, "sanity check");
-  // Link Java Thread object <-> C++ Thread
 
-  // Get the C++ thread object (an oop) from the JNI handle (a jthread)
-  // and put it into a new Handle.  The Handle "thread_oop" can then
-  // be used to pass the C++ thread object to other methods.
-
-  // Set the Java level thread object (jthread) field of the
-  // new thread (a JavaThread *) to C++ thread object using the
-  // "thread_oop" handle.
-
-  // Set the thread field (a JavaThread *) of the
-  // oop representing the java_lang_Thread to the new thread (a JavaThread *).
-
+  // 获取C++线程对象（一个oop）的句柄，并将其放入新的句柄中。
+  // 句柄"thread_oop"可以用于将C++线程对象传递给其他方法。
   Handle thread_oop(Thread::current(),
                     JNIHandles::resolve_non_null(jni_thread));
   assert(InstanceKlass::cast(thread_oop->klass())->is_linked(),
@@ -1673,19 +1683,17 @@ void JavaThread::prepare(jobject jni_thread, ThreadPriority prio) {
     assert(prio != NoPriority, "A valid priority should be present");
   }
 
-  // Push the Java priority down to the native thread; needs Threads_lock
+  // 将Java优先级设置为原生线程的优先级；需要Threads_lock
   Thread::set_priority(this, prio);
 
-  // Add the new thread to the Threads list and set it in motion.
-  // We must have threads lock in order to call Threads::add.
-  // It is crucial that we do not block before the thread is
-  // added to the Threads list for if a GC happens, then the java_thread oop
-  // will not be visited by GC.
+  // 将新线程添加到线程列表并使其开始运行。
+  // 我们必须持有线程锁才能调用Threads::add。
+  // 至关重要的是，在调用Threads::add之前，我们不应该阻塞，
+  // 因为如果发生GC，那么java_thread oop将不会被GC访问。
   Threads::add(this);
-  // Publish the JavaThread* in java.lang.Thread after the JavaThread* is
-  // on a ThreadsList. We don't want to wait for the release when the
-  // Theads_lock is dropped somewhere in the caller since the JavaThread*
-  // is already visible to JVM/TI via the ThreadsList.
+  // 在线程添加到线程列表后发布java.lang.Thread中的JavaThread*。
+  // 我们不想在调用者某处释放Threads_lock时等待，
+  // 因为JavaThread*已经通过ThreadsList对JVM/TI可见。
   java_lang_Thread::release_set_thread(thread_oop(), this);
 }
 
@@ -1750,6 +1758,8 @@ void JavaThread::print_stack_on(outputStream* st) {
   }
 }
 
+// 打印虚拟线程的栈跟踪信息。虚拟线程是JVM内部用于执行特定任务的线程，它们与常规Java线程不同，通常不显示在Java堆栈跟踪中。
+// 这个方法用于调试目的，可以帮助开发者了解虚拟线程的执行情况
 void JavaThread::print_vthread_stack_on(outputStream* st) {
   assert(is_vthread_mounted(), "Caller should have checked this");
   assert(has_last_Java_frame(), "must be");
@@ -1766,7 +1776,7 @@ void JavaThread::print_vthread_stack_on(outputStream* st) {
   vframe* start_vf = last_java_vframe(&reg_map);
   int count = 0;
   for (vframe* f = start_vf; f != nullptr; f = f->sender()) {
-    // Watch for end of vthread stack
+    // 检查是否到达虚拟线程栈的末端
     if (Continuation::is_continuation_enterSpecial(f->fr())) {
       assert(cont_entry == Continuation::get_continuation_entry_for_entry_frame(this, f->fr()), "");
       if (cont_entry->is_virtual_thread()) {
@@ -1778,15 +1788,15 @@ void JavaThread::print_vthread_stack_on(outputStream* st) {
       javaVFrame* jvf = javaVFrame::cast(f);
       java_lang_Throwable::print_stack_element(st, jvf->method(), jvf->bci());
 
-      // Print out lock information
+      // 打印锁信息
       if (JavaMonitorsInStackTrace) {
         jvf->print_lock_info_on(st, count);
       }
     } else {
-      // Ignore non-Java frames
+      // 忽略非Java帧
     }
 
-    // Bail-out case for too deep stacks if MaxJavaStackTraceDepth > 0
+    // 对于太深的栈，如果MaxJavaStackTraceDepth > 0，则退出
     count++;
     if (MaxJavaStackTraceDepth > 0 && MaxJavaStackTraceDepth == count) return;
   }
@@ -2010,18 +2020,17 @@ bool JavaThread::sleep(jlong millis) {
 // java.lang.Thread.sleep support
 // Returns true if sleep time elapsed as expected, and false
 // if the thread was interrupted.
+// 用于使当前线程休眠指定的纳秒数。这是一个非阻塞的休眠方法，如果在休眠期间线程被中断，它将立即返回
 bool JavaThread::sleep_nanos(jlong nanos) {
   assert(this == Thread::current(),  "thread consistency check");
   assert(nanos >= 0, "nanos are in range");
 
   ParkEvent * const slp = this->_SleepEvent;
-  // Because there can be races with thread interruption sending an unpark()
-  // to the event, we explicitly reset it here to avoid an immediate return.
-  // The actual interrupt state will be checked before we park().
+  // 由于线程中断可能会发送一个unpark()到事件，我们在这里明确地重置它，以避免立即返回。
+  // 实际的中断状态将在我们停车之前进行检查。
   slp->reset();
-  // Thread interruption establishes a happens-before ordering in the
-  // Java Memory Model, so we need to ensure we synchronize with the
-  // interrupt state.
+  // 线程中断在Java内存模型中建立了一个先行关系。
+  // 因此，我们需要确保我们与中断状态同步。
   OrderAccess::fence();
 
   jlong prevtime = os::javaTimeNanos();
@@ -2029,7 +2038,7 @@ bool JavaThread::sleep_nanos(jlong nanos) {
   jlong nanos_remaining = nanos;
 
   for (;;) {
-    // interruption has precedence over timing out
+    // 中断优先于超时
     if (this->is_interrupted(true)) {
       return false;
     }
@@ -2044,11 +2053,11 @@ bool JavaThread::sleep_nanos(jlong nanos) {
       slp->park_nanos(nanos_remaining);
     }
 
-    // Update elapsed time tracking
+    // 更新已用时间跟踪
     jlong newtime = os::javaTimeNanos();
     if (newtime - prevtime < 0) {
-      // time moving backwards, should only happen if no monotonic clock
-      // not a guarantee() because JVM should not abort on kernel/glibc bugs
+      // 时间倒退，只可能发生在没有单调时钟的情况下
+      // 不是一个保证()，因为JVM不应该因内核/glibc错误而中止
       assert(false,
              "unexpected time moving backwards detected in JavaThread::sleep()");
     } else {
@@ -2059,10 +2068,11 @@ bool JavaThread::sleep_nanos(jlong nanos) {
 }
 
 // Last thread running calls java.lang.Shutdown.shutdown()
+// 调用Java虚拟机的关闭钩子。这些关闭钩子是由java.lang.Runtime类的addShutdownHook方法注册的，用于在虚拟机关闭之前执行特定的代码
 void JavaThread::invoke_shutdown_hooks() {
   HandleMark hm(this);
 
-  // We could get here with a pending exception, if so clear it now.
+  // 我们可能在这里有一个待定的异常，如果是这样，现在清除它。
   if (this->has_pending_exception()) {
     this->clear_pending_exception();
   }
@@ -2072,12 +2082,9 @@ void JavaThread::invoke_shutdown_hooks() {
     SystemDictionary::resolve_or_null(vmSymbols::java_lang_Shutdown(),
                                       THREAD);
   if (shutdown_klass != nullptr) {
-    // SystemDictionary::resolve_or_null will return null if there was
-    // an exception.  If we cannot load the Shutdown class, just don't
-    // call Shutdown.shutdown() at all.  This will mean the shutdown hooks
-    // won't be run.  Note that if a shutdown hook was registered,
-    // the Shutdown class would have already been loaded
-    // (Runtime.addShutdownHook will load it).
+    // 如果无法加载Shutdown类，则根本不调用Shutdown.shutdown()。
+    // 这将意味着不会运行关闭钩子。注意，如果注册了一个关闭钩子，
+    // Shutdown类将已经被加载（Runtime.addShutdownHook将加载它）。
     JavaValue result(T_VOID);
     JavaCalls::call_static(&result,
                            shutdown_klass,
@@ -2087,6 +2094,7 @@ void JavaThread::invoke_shutdown_hooks() {
   }
   CLEAR_PENDING_EXCEPTION;
 }
+
 
 #ifndef PRODUCT
 void JavaThread::verify_cross_modify_fence_failure(JavaThread *thread) {
